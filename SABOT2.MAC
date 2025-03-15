@@ -1,0 +1,492 @@
+	.title	SABOT2
+	.mcall	.setto .print .exit
+	.list	MEB
+	.enabl	LC
+
+; CPU RAM addrs
+C_MAX_RAM	=: 135000
+PpuAddr		=: C_MAX_RAM
+PpuComm		=: C_MAX_RAM+2
+PpuData		=: C_MAX_RAM+4
+PpuKeys		=: C_MAX_RAM+6
+
+; PPU Misc
+C_VADDR		=: 100000
+C_SCRWID	=: 80.
+C_VEMPTY1	=: 286.*C_SCRWID+C_VADDR
+C_PORT_AY1	=: 177360
+
+SCREEN 		=: C_VADDR
+SCRTOP 		=: SCREEN+4
+
+; keys scancodes
+C_KEY_RIGHT	= 133
+C_KEY_LEFT	= 116
+C_KEY_UP	= 154
+C_KEY_DOWN	= 134
+C_KEY_SHIFT	= 105
+C_KEY_STOP	= 4
+
+TILES_DX	=: 32.
+TILES_DY	=: 18.
+
+C_PPU_INITILE	=: 1			; command - init tiles draw routine
+
+
+	.asect
+	.=1000
+
+Start:	mtps	#200				; stop right there, you interrupts
+	mov	#1000, SP			; just in case
+	; check RT11 presence
+	tst	@#54
+	beq	10$
+	.setto	#C_MAX_RAM+6
+	cmp	R0, #C_MAX_RAM+6
+	beq	10$
+	.print	#MsgMem
+	.exit
+10$:	; launch PPU first
+	mov	#177777, PpuComm
+	clr	PpuData
+	clr	PpuKeys
+	call	RunPpu
+	tst	PpuComm
+	bne	.-4
+	; wait a bit
+	clr	R0
+	sob	R0, .
+	; relocate CPU unpacker and code
+	mov	#UnpackEnd, R0
+	mov	#C_MAX_RAM, R1
+	mov	#UnpackEnd-CpuData/2, R3
+	mov	-(R0), -(R1)
+	sob	R3, .-2
+	; unpack and run CPU
+	jmp	@#C_MAX_RAM-UnpackEnd+UnpackRun	
+
+MsgMem:	.asciz	"(!) unable to get memory (135000)"
+	.even
+
+; //////////////////////////////////////////////////////////////////////////////
+; // CPU packed data and unpacker
+; //////////////////////////////////////////////////////////////////////////////
+
+CpuData:
+	@includebin _stcore.zx0.bin
+	.even
+CpuDataEnd:
+
+; unpack and run CPU
+UnpackRun:
+	mov	#C_MAX_RAM-UnpackEnd+CpuData, R0
+	mov	SP, R1
+	call	@#C_MAX_RAM-UnpackEnd+Unpack
+	jmp	(SP)
+
+Unpack:	clr	R2
+	movb	#200, R3
+	sxt	R5
+10$:	call	50$
+	movb	(R0)+, (R1)+
+	sob	R2, .-2
+	aslb	R3
+	bcs	30$
+	call	50$
+20$:	mov	R1, R4
+	add	R5, R4
+	movb	(R4)+, (R1)+
+	sob	R2, .-2
+	aslb	R3
+	bcc	10$
+30$:	mov	#-2, R2
+	call	60$
+	incb	R2
+	bne	.+4
+40$:	return
+	swab	R2
+	mov	R2, R5
+	clrb	R5
+	bisb	(R0)+, R5
+	asr	R5
+	mov	#1, R2
+	bcs	.+6
+	call	80$
+	inc	R2
+	br	20$
+50$:	incb	R2
+60$:	aslb	R3
+	bne	70$
+	movb	(R0)+, R3
+	rolb	R3
+70$:	bcs	40$
+80$:	aslb	R3
+	rol	R2
+	br	60$
+UnpackEnd:
+
+; //////////////////////////////////////////////////////////////////////////////
+; // Utils
+; //////////////////////////////////////////////////////////////////////////////
+
+; channel 2 data
+PPmsg:	.word	PPArr
+        .word	177777
+PPArr:	.byte	0				; 23334 return value (0 - OK)
+PPCmd:	.byte	1				; 23335 command (1 - allocate)
+PPDev:	.word	32				; 23336 device type (0x-FD, 32-ppu mem)
+PPApp:	.word	0				; 23340 argument(s) (PPU addr for mem operations)
+PPAcp:	.word	End-PpuStart/2			; 23342 CPU addr (length in words for mem allocate)
+PPLen:	.word	End-PpuStart/2			; 23344 length in words
+
+; send to PPU by channel 2
+PPSen:	mov	#PPMsg, R2
+	mov	#5, R3
+	br	20$
+10$:	movb	(R2)+, @#176676
+20$:	tstb	@#176674
+	bpl	20$
+	sob	R3, 10$
+	return
+
+; run code, wait for execution
+RunPpu:	call	PPSen				; allocate (!) no testing for success
+	mov	PPApp, PpuAddr			; copy allocated PPU addr for later use
+	movb	#20, PPCmd			; copy mem CPU -> PPU
+	mov	#PpuStart, PPAcp		; adjust start addr (there was mem size for allocate)
+	call	PPSen				;
+	movb	#30, PPCmd			; run
+	br	PPSen				;
+
+; //////////////////////////////////////////////////////////////////////////////
+; // PPU
+; //////////////////////////////////////////////////////////////////////////////
+
+PpuStart:
+	mtps	#200
+	; stop FD (? do we need that ?)
+	clr	R0
+	call	@7132(R0)
+	; backup and clean low addrs except 272
+	mov	PC, R0
+	add	#Bkp-., R0
+	clr	R1
+	mov	#400, R3
+10$:	mov	(R1), (R0)+
+	cmp	R1, #272
+	bne	20$
+	tst	(R1)+
+	br	30$
+20$:	clr	(R1)+
+30$:	sob	R3, 10$
+	mov	#2, (R3)			; set RTI at @#0	
+
+ClearVdata:
+	; clear screen vdata
+	mov	#177010, R4
+	mov	#177012, R3
+	mov	#177014, R5
+	mov	#100000, (R4)
+	mov	#100000, R0
+10$:	clr	(R5)
+	clr	(R3)
+	inc	(R4)
+	sob	R0, 10$
+
+; setup lines table
+SetVlines:
+	mov	PC, R0
+	add	#Lines+7-., R0
+	bic	#7, R0				; R0 - line table start addr
+	mov	R0, -(SP)			; save it
+	mov	R0, PalAdr
+	bis	#6, (SP)			; +6 means first line descriptor have color
+;	mov	#^B1011100010011111, (R0)+ 	; YRGB YRGB YRGB YRGB for colors 1st part
+;	mov	#^B1111111011011100, (R0)+	; YRGB YRGB YRGB YRGB for colors 2nd part
+	mov	#^B1011101010011000, (R0)+ 	; YRGB YRGB YRGB YRGB for colors 1st part
+	mov	#^B1111111011011100, (R0)+	; YRGB YRGB YRGB YRGB for colors 2nd part
+	clr	(R0)+				; vaddr not used for first 18 lines
+	mov	R0, (R0)
+	add	#2, (R0)
+	bis	#2, (R0)+			; +2 means next line is scale&cursor
+	mov	#^B0000000000010000, (R0)+	; black colored graph cursor
+	mov	#^B0000000000010111, (R0)+	; max luminance (xxxDDxBGR, DD: 00-640, 01-320, 10-160, 11-80)
+	clr	(R0)+				; vaddr still not needed
+	mov	R0, (R0)
+	add	#2, (R0)+			; +0 means next line is 2-word descriptor
+	; 16. not used lines
+	mov	#16., R3
+10$:	clr	(R0)+
+	mov	R0, (R0)
+	add	#2, (R0)+
+	sob	R3, 10$
+	; first 24. empty lines
+	mov	#24., R3
+	mov	#C_VEMPTY1, R1			; sort of empty line addr
+20$:	mov	R1, (R0)+
+	mov	R0, (R0)
+	add	#2, (R0)+
+	sob	R3, 20$
+	; 240. main lines
+	mov	#C_VADDR, R1
+	mov	#240., R3
+30$:	mov	R1, (R0)+			; put vaddr
+	mov	R0, (R0)			; put next element addr
+	add	#2, (R0)+
+	add	#C_SCRWID, R1			; advance vaddr
+	sob	R3, 30$
+	; last 24. empty lines
+	mov	#24., R3
+	mov	#C_VEMPTY1, R1			; sort of empty line addr
+90$:	mov	R1, (R0)+
+	mov	R0, (R0)
+	add	#2, (R0)+
+	sob	R3, 90$
+	; set lines
+	mov	(SP)+, @#272
+
+; setup other
+SetOther:
+	mov	@#177054, Bkp054
+	; timers
+	bis	#^B0000001000000000, @#177054	; disable vsync in CPU
+	bic	#^B0000000100000000, @#177054	; enable vsync in PPU
+	bic	#^B0001111110000000, @#177716	; sound init (mixer off)
+	; keyboard
+	mov	PC, R0
+	add	#KeyInt-., R0
+	mov	R0, @#300
+	bis	#100, @#177700			; allow keyboard interrupts
+	; vsync
+	mov	PC, R0
+	add	#VsyInt-., R0
+	mov	R0, @#100
+	mov	#200, @#102
+	; check AY presence
+	mov	PC, R0
+	add	#Int4-., R0
+	mov	R0, @#4
+	mov	#177777, R0
+	tst	@#C_PORT_AY1
+	mov	R0, HaveAY
+	clr	@#4
+	; setup scr index to vaddr
+	clr	R0
+	mov	PC, R5
+	add	#ScrIdxTable-., R5
+	mov	#TILES_DX*TILES_DY, R3
+10$:	mov	R0, R1
+	mov	R0, R2
+	ash	#-5, R1				; divide by 32
+	mul	#10.*C_SCRWID, R1		; tile DY is 10. screen lines
+	bic	#^B1111111111100000, R2
+	add	R2, R1
+	add	#SCRTOP, R1
+	mov 	R1, (R5)+
+	inc	R0
+	sob	R3, 10$
+
+
+Done:	mtps	#0				; 
+	mov	#PpuComm/2, @#177010		; ackn of command execution
+	clr	@#177014			;
+
+Main:	call	DrawTiles			; 
+	mov	#PpuComm/2, @#177010		; get command from CPU
+	mov	@#177014, R0			;
+	beq	Main				; no command
+	bmi	Exit				; exit PPU command
+	asl	R0
+	asl	R0
+	add	R0, PC
+	jmp	Main				; 0
+	jmp	InitTiles			; 1
+	; ...
+
+Exit:	mtps	#200
+	; restore 0..1000
+	mov	PC, R0
+	add	#Bkp-., R0
+	clr	R1
+	mov	#400, R3
+	mov	(R0)+, (R1)+
+	sob	R3, .-2
+	mov	Bkp054, @#177054
+	; signal to CPU
+	mov	#PpuComm/2, @#177010
+	clr	@#177014
+	mtps	#0
+	return
+
+
+; keys int - india style code
+KeyInt:	mov	@#177010, -(SP)
+	mov	R0, -(SP)
+	mov	#PpuKeys/2, @#177010		; prepare addr of keys in CPU
+	movb	@#177702, R0			; scancode (read it just once)
+	bmi	50$
+	; key pressed
+	cmp	R0, #C_KEY_LEFT
+	bne	11$
+	bis	#002, @#177014
+	br	90$
+11$:	cmp	R0, #C_KEY_RIGHT
+	bne	12$
+	bis	#001, @#177014
+	br	90$
+12$:	cmp	R0, #C_KEY_UP
+	bne	13$
+	bis	#010, @#177014
+	br	90$
+13$:	cmp	R0, #C_KEY_DOWN
+	bne	14$
+	bis	#004, @#177014
+	br	90$
+14$:	cmp	R0, #C_KEY_SHIFT
+	bne	90$
+	bis	#020, @#177014
+	br	90$
+50$:	; key released
+	bic	#^B1111111111110000, R0
+	cmp	R0, #^B1110			; left
+	bne	51$
+	bic	#002, @#177014
+	br	90$
+51$:	cmp	R0, #^B1011			; right
+	bne	52$
+	bic	#001, @#177014
+	br	90$
+52$:	cmp	R0, #^B1100			; up down
+	bne	53$
+	bic	#014, @#177014
+	br	90$
+53$:	cmp	R0, #^B0101			; shift
+	bne	90$
+	bic	#020, @#177014	
+90$:	; exit int
+	mov	(SP)+, R0
+	mov	(SP)+, @#177010
+	rti
+
+
+; initialize tiles draw routine
+InitTiles:
+	mov	#PpuData/2, @#177010
+	mov	@#177014, TileBufAddr
+	jmp	Done
+
+
+; draw tiles routine
+DrawTiles:
+	mov	TileBufAddr, R0			; check init
+	beq	99$				; not initialized yet
+	mov	R0, -(SP)			; 2(SP) tile buf addr in CPU/2	
+	mov	PC, -(SP)			; get temp buf addr
+	add	#TempBuf-., (SP)		; (SP) - temp buf addr
+	mov	#177010, R4
+	mov	#16., 91$+2			; 16. tiles max
+10$:	; tiles cycle
+	mov	2(SP), (R4)			; tile buf addr/2
+	mov	@#177014, R1			; check screen index
+	bmi	90$				; nothing to draw
+	; copy tile data (8 bytes) to temp buf here
+	mov	(SP), R2			; temp buf addr here
+	mov	#177014, R5
+	inc	(R4)
+	mov	(R5), (R2)+
+	inc	(R4)
+	mov	(R5), (R2)+
+	inc	(R4)
+	mov	(R5), (R2)+
+	inc	(R4)
+	mov	(R5), (R2)+
+	inc	(R4)
+	mov	(R5), R0			; ZX attr byte
+	mov	R0, @#177016			; set 'ink' color
+	asr	R0
+	bic	#^B1111111111100011, R0
+	add	PC, R0
+	add	#BackClrTbl-., R0
+	mov	(R0)+, @#177020			; set 'paper' color
+	mov	(R0)+, @#177022
+	; convert screen index to vaddr index
+	asl	R1
+	add	PC, R1
+	mov	ScrIdxTable-.(R1), (R4)
+	; copy temp buf
+	mov	(SP), R2
+	mov	#C_SCRWID, R1
+	; draw tile
+	mov	#177024, R5
+	.rept	2
+	; 0
+	clr	R3
+	bisb	(R2)+, R3
+	mov	R3, (R5)
+	add	R1, (R4)
+	; 1
+	clr	R3
+	bisb	(R2)+, R3
+	mov	R3, (R5)
+	add	R1, (R4)
+	; 2
+	clr	R3
+	bisb	(R2)+, R3
+	mov	R3, (R5)
+	add	R1, (R4)
+	; 3
+	clr	R3
+	bisb	(R2)+, R3
+	mov	R3, (R5)
+	add	R1, (R4)
+	; 4 (duplicate)
+	mov	R3, (R5)
+	add	R1, (R4)
+	.endr
+	; mark as drawn
+	mov	2(SP), (R4)
+	mov	#-1, @#177014
+90$:	add	#6., 2(SP)
+91$:	dec	#000000
+	bne	10$
+	tst	(SP)+
+	tst	(SP)+
+99$:	return
+
+
+; vsync int
+VsyInt:	inc	(PC)+
+VsyCnt:	.word	0
+	rti
+
+
+; temporary trap 4
+Int4:	clr	R0
+	rti
+
+
+; data
+BackClrTbl:	.word	^B0000000000000000, ^B0000000000000000
+		.word	^B0001000100010001, ^B0001000100010001
+		.word	^B0010001000100010, ^B0010001000100010
+		.word	^B0011001100110011, ^B0011001100110011
+		.word	^B0100010001000100, ^B0100010001000100
+		.word	^B0101010101010101, ^B0101010101010101
+		.word	^B0110011001100110, ^B0110011001100110
+		.word	^B0111011101110111, ^B0111011101110111
+TileBufAddr:	.word	0
+TempBuf:	.word	4			; 8 bytes temp tile buf
+
+HaveAY:		.word	177777
+PalAdr:		.word	0
+Pal1:		.word	^B1011101010011000
+Pal2:		.word	^B1111111011011100
+Bkp054:		.word	0			; save 177054
+Bkp710:		.word	0			; save 177710
+Bkp:		.blkw	400			; 0-1000 addrs backup
+Lines:		.blkw	288.+16.*2+8.+4.+16.	; 304 x 2-words + 2 x 4-words + 4 x 1-word (for align) + 16. for palette change
+
+ScrIdxTable:	.blkw	TILES_DX*TILES_DY	; screen index to vaddr table
+
+End:
+	.end	Start

@@ -1,0 +1,1 @@
+start ..\..\ukncbtl\ukncbtl /autostart /disk0:.\release\sabot2.dsk /boot1
