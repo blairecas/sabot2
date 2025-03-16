@@ -201,8 +201,6 @@ SetVlines:
 	mov	R0, -(SP)			; save it
 	mov	R0, PalAdr
 	bis	#6, (SP)			; +6 means first line descriptor have color
-;	mov	#^B1011100010011111, (R0)+ 	; YRGB YRGB YRGB YRGB for colors 1st part
-;	mov	#^B1111111011011100, (R0)+	; YRGB YRGB YRGB YRGB for colors 2nd part
 	mov	#^B1011101010011000, (R0)+ 	; YRGB YRGB YRGB YRGB for colors 1st part
 	mov	#^B1111111011011100, (R0)+	; YRGB YRGB YRGB YRGB for colors 2nd part
 	clr	(R0)+				; vaddr not used for first 18 lines
@@ -227,14 +225,29 @@ SetVlines:
 	mov	R0, (R0)
 	add	#2, (R0)+
 	sob	R3, 20$
-	; 240. main lines
+	; 180. main lines
 	mov	#C_VADDR, R1
-	mov	#240., R3
+	mov	#180., R3
 30$:	mov	R1, (R0)+			; put vaddr
 	mov	R0, (R0)			; put next element addr
 	add	#2, (R0)+
 	add	#C_SCRWID, R1			; advance vaddr
 	sob	R3, 30$
+	; 60. lines of info place
+	bis	#6, -(R0)
+	tst	(R0)+
+	mov	#^B1011111110011000, (R0)+
+	mov	#^B1111101011011001, (R0)+
+	mov	R1, (R0)+
+	add	#C_SCRWID, R1			; advance vaddr
+	mov	R0, (R0)
+	add	#2, (R0)+
+	mov	#59., R3
+40$:	mov	R1, (R0)+			; put vaddr
+	mov	R0, (R0)			; put next element addr
+	add	#2, (R0)+
+	add	#C_SCRWID, R1			; advance vaddr
+	sob	R3, 40$
 	; last 24. empty lines
 	mov	#24., R3
 	mov	#C_VEMPTY1, R1			; sort of empty line addr

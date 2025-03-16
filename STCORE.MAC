@@ -602,11 +602,11 @@ PreScreen:
 ; // START
 ; //////////////////////////////////////////////////////////////////////////////
 
-Start:	; init timer characters
-	mov	#K36204, R2
-	movb	#'9, (R2)+
-	movb	#'9, (R2)+
-	movb	#'9, (R2)+
+Start:	; init timer characters (no timer heh)
+	mov	#K36204, R2			; magic number lol (it's a good number in China)
+	movb	#'1, (R2)+
+	movb	#'8, (R2)+
+	movb	#'6, (R2)+
 	; set level data pointer
 	mov	#LData, R4
 	mov	R4, L9Ptr
@@ -640,16 +640,14 @@ Start:	; init timer characters
 
 GSTART:	; After the briefing - clear the screen, show the indicator panel
 	call	PreScreen
-	NOP2
-	NOP2	; MOVB	K41304, R0		; get input method
-	NOP2	; MOV	#L15756, R2
-	NOP1	; DECB	R0			; input method == 1 ? keyboard
-	NOP1	; BEQ	K11436			; yes =>
-	NOP2	; MOV	#L15775, R2		; Redefined keys address
-	NOP2	; 	K11422:	MOV	#K41305, R3		; key mappings table
-	NOP2	; MOV	#000017, R1		; 15. bytes
-	NOP1	; K11432:	MOVB	(R2)+, (R3)+		; < copy byte
-	NOP1	; SOB	R1, K11432		; repeat
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
 
 ; Prepare Stashes
 K11436:	MOV	#000041, R5		; 33. records
@@ -771,7 +769,13 @@ K12121:	.BYTE	000,000,000,360,000,010,000,344,000,022,000,012,000,012,000,012
 ;
 ; Starting the game, indicator panel frame is already shown
 ; NDPAN:
-K12454:	MOV	L9Ptr, R3		; get LVPTR
+K12454:	; print timer ??? values
+	MOV	#110226, R2		; screen address
+	MOV	#K36204, R3		; TIMER value 3-char
+	MOV	#000003, R1		; 3.
+	CALL	K01704			; PRINT string
+	;
+	MOV	L9Ptr, R3		; get LVPTR
 	CLR	R2
 	BISB	000001(R3), R2		; get NTPND byte - tapes needed
 	br	K12504			; BEQ	K12504			; jump if no tape needed
@@ -2856,40 +2860,62 @@ K33056:	BEQ	K33114			; alive =>
 	MOV	R3, <K25272+2>		; set JMP address
 K33114:	CMPB	K33540, #002		; DEAD == 2 ?
 	BEQ	K33270
+
 ; Update TIMER counter
-K33124:	MOV	#K36207, R3		; TIMER counter address
-	DECB	(R3)			; decrement
-	BNE	K33270
-	MOVB	#000024, (R3)		; reset the counter
-	DECB	-(R3)			; decrement
-	CMPB	#000057, (R3)		; less than '0' ?
-	BNE	K33250
-	MOVB	#000071, (R3)		; '9'
-	DECB	-(R3)			; decrement
-	CMPB	#000057, (R3)		; less than '0' ?
-	BNE	K33250
-	MOVB	#000071, (R3)		; '9'
-	DECB	-(R3)			; decrement
-	MOVB	(R3), R0
-	CMPB	R0, #000060		; '0' ?
-	BNE	K33232
-	PUSH	R0
-	PUSH	R3
-	MOV	#110146, R2		; screen address
-	MOV	#K33446, R3		; "TIME IS SHORT "
-	MOV	#000016, R1		; 14.
-	CALL	K01704			; PRINT string
-	POP	R3
-	POP	R0
-K33232:	CMPB	R0, #057		; less than '0' ?
-	BNE	K33250
-	MOVB	#002, K33540		; set DEAD = 2
-	BR	K33270
-K33250:	MOV	#110226, R2		; screen address
-	MOV	#K36204, R3		; TIMER value 3-char
-	MOV	#000003, R1		; 3.
-	CALL	K01704			; PRINT string
-K33270:	JMP	K24764			; => NXMAN
+K33124:	; а не пошел бы этот таймер знаете-ли
+	; кому таймер нужен - ну запустите его на телефоне
+	nop				; MOV	#K36207, R3		; TIMER counter address
+	nop
+	nop				; DECB	(R3)			; decrement
+	nop				; BNE	K33270
+	nop				; MOVB	#000024, (R3)		; reset the counter
+	nop
+	nop				; DECB	-(R3)			; decrement
+	nop				; CMPB	#000057, (R3)		; less than '0' ?
+	nop
+	nop				; BNE	K33250
+	nop				; MOVB	#000071, (R3)		; '9'
+	nop
+	nop				; DECB	-(R3)			; decrement
+	nop				; CMPB	#000057, (R3)		; less than '0' ?
+	nop
+	nop				; BNE	K33250
+	nop				; MOVB	#000071, (R3)		; '9'
+	nop
+	nop				; DECB	-(R3)			; decrement
+	nop				; MOVB	(R3), R0
+	nop				; CMPB	R0, #000060		; '0' ?
+	nop
+	nop				; BNE	K33232
+	nop				; PUSH	R0
+	nop				; PUSH	R3
+	nop				; MOV	#110146, R2		; screen address
+	nop
+	nop				; MOV	#K33446, R3		; "TIME IS SHORT "
+	nop
+	nop				; MOV	#000016, R1		; 14.
+	nop
+	nop				; CALL	K01704			; PRINT string
+	nop
+	nop				; POP	R3
+	nop				; POP	R0
+	nop				; K33232:	CMPB	R0, #057		; less than '0' ?
+	nop
+	nop				; BNE	K33250
+	nop				; MOVB	#002, K33540		; set DEAD = 2
+	nop
+	nop
+	nop				; BR	K33270
+	nop				; K33250:	MOV	#110226, R2		; screen address
+	nop
+	nop				; MOV	#K36204, R3		; TIMER value 3-char
+	nop
+	nop				; MOV	#000003, R1		; 3.
+	nop
+	nop				; CALL	K01704			; PRINT string
+	nop
+K33270:	jmp	K24764			; K33270:	JMP	K24764			; => NXMAN
+
 ;
 ; UPOBJ procedure - Object moves up
 K33274:	TSTB	000001(R4)		; Y == 0 ?
@@ -2999,13 +3025,15 @@ K36142:	MOV	#000010, R1		;WARN 8.
 K36200:	.WORD	000006
 K36202:	.WORD	000000
 ;
-K36204:	.ASCII	/999/			; TIME1 - timer current value, 3-char
+K36204:	.ASCII	/???/			; TIME1 - timer current value, 3-char
 K36207:	.BYTE	10.			; TIME2 - timer counter
 K36210:	.BYTE	10.			; MANA ??
 K36211:	.BYTE	10.			; MAND ??
 K36212:	.BYTE	112			; MANPS ??
 K36213:	.BYTE	001
+RoomY:
 K36214:	.BYTE	0			; RMDN - room level, 0=top, 31.=water
+RoomX:
 K36215:	.BYTE	0			; RMAC - room position 0=left, 31.=right
 K36216:	.BYTE	0			; ELECU ??
 	.EVEN
