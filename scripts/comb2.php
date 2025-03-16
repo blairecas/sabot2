@@ -36,18 +36,16 @@ function mirror ($b)
 //			$arr3[$i] = str_pad(decoct($b), 3, '0', STR_PAD_LEFT);
 //			fputs($g, $arr3[$i].', ');
 //		}
-
 // mirror 
 		for ($i=0; $i<8; $i++) {
 			$sb = $arr3[$i];
 			$b = intval($sb, 8);
-			$b = mirror($b);
+			if ($do_mirror) $b = mirror($b);
 			$arr3[$i] = str_pad(decoct($b), 3, '0', STR_PAD_LEFT);
 			fputs($g, $arr3[$i].', ');
 		}
-
+		// attr byte
 		fputs($g, $arr3[8]."\n");
-
 	}
 	fclose($f);
 	fclose($g);
