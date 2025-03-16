@@ -219,10 +219,9 @@ DrawScreen:
 	clr	R2
 	mov	#L24324, R4
 DrawScrCycle:
-	tstb	(R4)				; check byte in BUFFD
+	tstb	(R4)+				; check byte in BUFFD
 	bne	DrawTile			; drawing this tile =>
 DrawScrCont:
-	inc	R4
 	inc	R2
 	cmp	R2, #TILES_DX*TILES_DY
 	bne	DrawScrCycle	
@@ -290,9 +289,7 @@ K02450:	BICB	#177407, K04672		; COL
 	MOV	TileBufAddr, R2		; PIX buffer address
 	tst	(R2)+			; skip screen index word
 	CALL	K36042			; G1DIS
-	;
 	call	TileOver
-	;
 	CALL	K36042			; G1DIS
 ; GRD2:
 K03014:	MOV	(SP), R2		; restore index
@@ -308,9 +305,7 @@ K03014:	MOV	(SP), R2		; restore index
 	MOV	TileBufAddr, R2		; PIX buffer address
 	tst	(R2)+			; skip screen index word
 	CALL	K36056			; G2DIS
-	;
 	call	TileOver
-	;
 	CALL	K36056			; G2DIS
 ; NINJA:
 K03364:	MOVB	K03542, K41175		; save (NJCOL+1) to TMPNC
@@ -368,9 +363,7 @@ K03560:	MOVB	K41175, K03542		; restore TMPNC -> NJCOL+1
 	ADD	#L16744, R3		; + NCHRS
 	MOV	TileBufAddr, R2		; PIX buffer address
 	tst	(R2)+			; skip screen index word
-	;
 	call	TileOver
-	;
 ;
 K04104:	MOV	#K04672, R3		; get COL
 	MOV	#000020, R0		; 16.
@@ -440,16 +433,17 @@ K04632:	RETURN
 ; R3 - source addr, K36264 - direction, R2 - dest addr
 TileOver:
 	; use C as flag for DIR
-	tstb	K36264			; check DIR (also clears C)
+	tstb	K36264				; check DIR (also clears C)
 	beq	.+4
-	sec				; use mirroring then
+	sec					; use mirroring then
 	.rept	8.
-	movb	(R3)+, R1		; R1 - tile byte
-	bcc	.+6			; skip mirroring if needed
-	movb	L23024(R1), R1		; mirror tile byte
-	bicb	MaskTable(R1), (R2)	; apply auto-mask
-	bisb	R1, (R2)+		; apply tile
+	movb	(R3)+, R1			; R1 - tile byte
+	bcc	.+6				; skip mirroring if needed
+	movb	L23024(R1), R1			; mirror tile byte
+	bicb	MaskTable(R1), (R2)		; apply auto-mask
+	bisb	R1, (R2)+			; apply tile
 	.endr
+	bic	#^B1111111111000111, (R2)	; clear attribute value for 'paper'
 	return
 
 ; 
