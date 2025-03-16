@@ -603,10 +603,10 @@ PreScreen:
 ; //////////////////////////////////////////////////////////////////////////////
 
 Start:	; init timer characters (no timer heh)
-	mov	#K36204, R2			; magic number lol (it's a good number in China)
-	movb	#'1, (R2)+
+	mov	#K36204, R2
 	movb	#'8, (R2)+
-	movb	#'6, (R2)+
+	movb	#'8, (R2)+
+	movb	#'8, (R2)+
 	; set level data pointer
 	mov	#LData, R4
 	mov	R4, L9Ptr
