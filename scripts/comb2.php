@@ -15,6 +15,7 @@ function mirror ($b)
 
 	$f = fopen('backs.txt', 'r');
 	$g = fopen('backs_out.txt', 'w');
+	$idx = 0;
 	while (!feof($f))
 	{
 		$s = fgets($f);
@@ -22,7 +23,7 @@ function mirror ($b)
 		if (strlen($s) == 0) continue;
 		if ($s[0] == ';') continue;
 		$arr1 = explode(':', $s);
-		fputs($g, $arr1[0].":\t.byte\t");
+		fputs($g, /*$arr1[0].":".*/"\t.byte\t");
 		$arr1[1] = trim($arr1[1]);
 		$arr2 = explode("\t", $arr1[1]);
 		$arr2[1] = trim($arr2[1]);
@@ -40,12 +41,16 @@ function mirror ($b)
 		for ($i=0; $i<8; $i++) {
 			$sb = $arr3[$i];
 			$b = intval($sb, 8);
-			if ($do_mirror) $b = mirror($b);
+			$b = mirror($b);
 			$arr3[$i] = str_pad(decoct($b), 3, '0', STR_PAD_LEFT);
 			fputs($g, $arr3[$i].', ');
 		}
 		// attr byte
-		fputs($g, $arr3[8]."\n");
+		fputs($g, $arr3[8]);
+		// .even byte
+		fputs($g, ", 0 ; ".str_pad(decoct($idx),3,'0',STR_PAD_LEFT)."\n");
+		// 
+		$idx++;
 	}
 	fclose($f);
 	fclose($g);

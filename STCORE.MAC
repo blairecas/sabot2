@@ -11,7 +11,7 @@ C_VADDR		=: 100000
 C_SCRWID	=: 80.
 C_VEMPTY1	=: 286.*C_SCRWID+C_VADDR
 
-SCREEN 		=: C_VADDR		; Начало экрана, косвенный адрес для УКНЦ
+SCREEN 		=: C_VADDR
 SCRTOP 		=: SCREEN+4
 
 TILES_DX	=: 32.
@@ -92,7 +92,8 @@ K06706:	RORB	R5			; | <
 
 
 ; Procedure: EXX
-K01434:	PUSH	R4
+ExxProc:
+	PUSH	R4
 	MOV	#K01552, R4
 	TST	(R4)
 	BNE	K01470
@@ -131,31 +132,28 @@ K01716:	CLR	R0
 	ASL	R0
 	ASL	R0
 	ASL	R0			; *8.
-	ADD	#<L06234-256.>, R0	; + font base addr minus 256. for 32. symbols
+	ADD	#FontData-256., R0	; + font base addr minus 256. for 32. symbols
 	PUSH	R2
 	MOV	R2, @#176640
 	MOV	#176642, R2		; Адрес порта адреса косвенной записи УКНЦ
 	PUSH	R1
-	CLR	(R2)			; Очищаем верхнюю строку
-	ADD	#000120, @#176640		; next line
 	MOVB	#000010, R5		; 8. lines
 K01760:	CLR	R1			; <
 	BISB	(R0)+, R1
 	MOV	R1, (R2)		; |  copy to screen
 	ADD	#000120, @#176640		; |  next line
 	SOB	R5, K01760		; repeat
-	CLR	(R2)			; Очищаем нижнюю строку
 	POP	R1
 	POP	R2
 K02006:	ADD	#000001, R4		;!!MUT-ARG!! shift 1. or 32.
-	CMPB	#000040, <K02006+2>	; vertical text?
+	CMPB	#000040, K02006+2	; vertical text?
 	BNE	K02030			; no =>
-	ADD	#001200, R2
+	ADD	#8.*C_SCRWID, R2
 	BR	K02032
 K02030:	INC	R2
 K02032:	BIT	#000037, R4
 	BNE	K02044
-	ADD	#<800.-32.>, R2
+	ADD	#8.*C_SCRWID-32., R2
 K02044:	SOB	R1, K01716		; repeat
 	POP	R5
 	POP	R4
@@ -165,7 +163,7 @@ K02044:	SOB	R1, K01716		; repeat
 
 ; Procedure: Screen coords R2 to screen address
 ; Screen coords word: [0  1  0  Y7 Y6 Y2 Y1 Y0 | Y5 Y4 Y3 X4 X3 X2 X1 X0]
-; Для УКНЦ мы игнорируем Y2 Y1 Y0, а в целом Y умножаем на 800. = 10. строк по 80.
+; Для УКНЦ мы игнорируем Y2 Y1 Y0, а в целом Y умножаем на 640.
 K02056:	MOV	R2, R4
 	BIC	#177740, R4		; X = 0..31.
 	BIC	#163437, R2		; 1110011100011111
@@ -179,11 +177,9 @@ K02056:	MOV	R2, R4
 	ASL	R2
 	ASL	R2			; R2 = Y * 128.
 20$:	ADD	#000000, R2		; R2 = Y * 160.
-	MOV	R2, @#<30$+2>
 	ASL	R2
 	ASL	R2			; R2 = Y * 640.
-30$:	ADD	#000000, R2		; R2 = Y * 800.
-	ADD	R4, R2			; R2 = Y * 800. + X
+	ADD	R4, R2
 	ADD	#SCRTOP, R2		; R2 = screen start address
 	RETURN
 
@@ -203,219 +199,153 @@ K01611:	.byte	0
 
 ; DOPIC procedure: Show the room on the screen
 DrawScreen:
-	;
-	MOV	#K41173, R3			; FFCOL
-	MOVB	(R3), R5			; get FFCOL
-	MOV	#000004, R0
-	XOR	R0, R5				; XOR 4
-	MOVB	R5, (R3)+			; set FFCOL; R3 = FFCOL+1
-	CLRB	(R3)				; clear (FFCOL+1)
-	;
-;	mov	#TILES_DX*TILES_DY-1, R2
-;	mov	#TILES_DX*TILES_DY+L24324, R4	; BUFFD
-; снизу-вверх будет быстрее (не нужен cmp)
-; но почему-то кажется что более коряво выглядит на экране
-; посему пока-что будет как и раньше сверху-вниз
-	clr	R2
-	mov	#L24324, R4
+	; "снизу-вверх" будет быстрее, но выглядит "корявее"...
+	clr	R5				; R5 - index (!) do not touch it in drawing
+	mov	#L24324, R4			; R4 - addr in BuffD (!) do not touch it
 DrawScrCycle:
 	tstb	(R4)+				; check byte in BUFFD
-	bne	DrawTile			; drawing this tile =>
+	bne	TBufBgr				; drawing this tile =>
 DrawScrCont:
-	inc	R2
-	cmp	R2, #TILES_DX*TILES_DY
-	bne	DrawScrCycle	
+	inc	R5
+	cmp	R5, #TILES_DX*TILES_DY
+	bne	DrawScrCycle
 	return
 
-; Drawing the tile, start with the background
-DrawTile:
-	PUSH	R2			; save index
-	; background tile
-	CLR	R0
-	BISB	L25424(R2), R0		; get tile from BUFFB: Back tile screen
-	MOVB	R0, <K04673>		; set BAKCR
-	MOV	R0, R3
-	ASL	R3
-	ASL	R3
-	ASL	R3			; *8.
-	ADD	R0, R3			; *9.
-	ADD	#K77531, R3		; + BCHRS
-	;
-	mov	TileBufAddr, R5		; PIX buffer address
+; background tile
+TBufBgr:
+	clr	R1
+	bisb	L25424(R5), R1		; get tile from BUFFB: Back tile screen
+	mul	#10., R1		; tile is 10. bytes
+	add	#BackTiles, R1		; + BCHRS
 	; advance tile buf addr
-	add	#12., R5		; 12. bytes for tile data
-	cmp	R5, #TileBufEnd
+	mov	TileBufAddr, R3		; PIX buffer address
+	add	#12., R3		; 12. bytes for tile data
+	cmp	R3, #TileBufEnd
 	blo	10$
-	mov	#TileBuf, R5
-10$:	mov	R5, TileBufAddr
-	; wait for PPU
-	tst	(R5)
+	mov	#TileBuf, R3
+10$:	mov	R3, TileBufAddr
+	; wait for PPU to finish if not
+	tst	(R3)
 	bpl	.-2
-	tst	(R5)+			; 00-01 skip screen index for now
 	; put background
-	movb	(R3)+, (R5)+		; 02
-	movb	(R3)+, (R5)+		; 03
-	movb	(R3)+, (R5)+		; 04
-	movb	(R3)+, (R5)+		; 05
-	movb	(R3)+, (R5)+		; 06
-	movb	(R3)+, (R5)+		; 07
-	movb	(R3)+, (R5)+		; 08
-	movb	(R3)+, (R5)+		; 09
-	movb	(R3)+, (R5)+		; 10 last byte is attr
-	;
-	CLRB	K41174			; clear FFCOL+1
-	MOV	(SP), R2		; restore index
-	; enemy 1 tile
-	CLR	R0
-	BISB	L30724(R2), R0		; get tile from Enemy 0 tile screen
-	MOV	R0, R3
-	INCB	R0
-	BEQ	K03014			; => GRD2
-	CLRB	R1
-	CMPB	R0, #000244
-K02426:	BLO	K02450			; => FFCL2
-	CMPB	R0, #000247		; == 167. ?
-	BHIS	K02450			; => FFCL2
-	MOVB	K41173, R0		; get FFCOL
-	MOVB	R0, K41174		; set (FFCOL+1)
-	MOV	R0, R1
-; FFCL2:									; 978
-K02450:	BICB	#177407, K04672		; COL
-	BISB	R1, K04672		; COL
-	ASL	R3
-	ASL	R3
-	ASL	R3			; *8.
-	ADD	#K73546, R3		; GCHRS - tiles base address
-	MOV	TileBufAddr, R2		; PIX buffer address
-	tst	(R2)+			; skip screen index word
-	CALL	K36042			; G1DIS
+	tst	(R3)+			; skip screen index
+	mov	(R1)+, (R3)+
+	mov	(R1)+, (R3)+
+	mov	(R1)+, (R3)+
+	mov	(R1)+, (R3)+
+	mov	(R1)+, (R3)+		; last byte is attr
+
+; guard 1
+; flamethrower tiles #
+; 243..245
+TBufGuard1:
+	clr	R3
+	bisb	L30724(R5), R3
+	cmp	R3, #377
+	beq	TBufGuard2
+	; draw guard 1, R3 - tile #
+	asl	R3
+	asl	R3
+	asl	R3			; *8.
+	add	#K73546, R3		; GCHRS - tiles base address
+	movb	K36037, TCuDir		; set guard 1 DIR
 	call	TileOver
-	CALL	K36042			; G1DIS
-; GRD2:
-K03014:	MOV	(SP), R2		; restore index
-	CLR	R3
-	BISB	L32024(R2), R3		; get tile from Enemy 1 tile screen
-	CMP	R3, #377		; tile 255. ?
-	BEQ	K03364			; yes => NINJA
-	BICB	#177407, K04672		; COL := COL AND 248.
-	ASL	R3
-	ASL	R3
-	ASL	R3			; *8.
-	ADD	#K73546, R3		; + GCHRS - tiles base address
-	MOV	TileBufAddr, R2		; PIX buffer address
-	tst	(R2)+			; skip screen index word
-	CALL	K36056			; G2DIS
+
+; guard 2
+TBufGuard2:
+	clr	R3
+	bisb	L32024(R5), R3		; get tile from Enemy 1 tile screen
+	cmp	R3, #377		; tile 255. ?
+	beq	TBufNina		; yes => NINJA
+	; draw guard 2, R3 - tile #
+	asl	R3
+	asl	R3
+	asl	R3			; *8.
+	add	#K73546, R3		; + GCHRS - tiles base address
+	movb	K36040, TCuDir		; set guard 2 DIR
 	call	TileOver
-	CALL	K36056			; G2DIS
-; NINJA:
-K03364:	MOVB	K03542, K41175		; save (NJCOL+1) to TMPNC
-	MOV	(SP), R2		; restore index
-	CLR	R0
-	BISB	L27624(R2), R0		; get tile from BUFFN: Ninja tile screen
-	MOV	R0, R3
-	INCB	R0
-	BNE	K03412
-	JMP	K04104			; 0 => OBJDA
-K03412:	CMPB	R0, #000341		; 225.
-	BHIS	K03462			; => WILSN
-	CMPB	R0, #000323		; 221.
-	BLO	K03462			; => WILSN
-	CMPB	R0, #000327		; 215.
-	BLO	K03442			; => WLSN2
-	CMPB	R0, #000333		; 219.
-	BLO	K03462			; => WILSN
-; WLSN2:
-K03442:	MOVB	K04673, R0		; get BAKCR
-	DECB	R0
-	BNE	K03462			; => WILSN
-	MOVB	#007, K03542		; set (NJCOL+1) to 7 white
-	BR	K03544			; => HYPN2
+
+; Nina
+; Nina projectiles
+; 322, 323 - shuriken
+; 324, 325 - knife
+; 332, 333 - pipe
+; 334, 335 - rock, shit, etc
+; 336, 337 - wrench
+TBufNina:
+	clr	R3
+	bisb	L27624(R5), R3		; get tile from BUFFN: Ninja tile screen
+	cmp	R3, #377
+	beq	TBufFore
+
+; check Nina shocked
 ; WILSN:
-K03462:	MOVB	K04673, R0		; get BAKCR
-	CMPB	R0, #000117		; == 79. ?
-	BLO	K03516			; => OBJD
-	CMPB	R0, #000126		; == 86. ?
-	BHIS	K03516			; => OBJD
-	MOVB	<L14472+2>, R0		; get (DECEN+1)
-	BEQ	K03516			; => OBJD
-	MOVB	#001, K36216		; set ELECU = 1: electroshocked
-; OBJD:
-K03516:	MOVB	K41174, R0		; get (FFCOL+1)
-	BEQ	K03544			; => HYPN2
-	PUSH	R3
-	MOVB	#003, R1
-	CALL	L14472			; DECEN
-	POP	R3
-	BR	K03560			; => HYPNO
+;	MOVB	K04673, R0		; get BAKCR
+;	CMPB	R0, #000117		; == 79. ?
+;	BLO	K03516			; => OBJD
+;	CMPB	R0, #000126		; == 86. ?
+;	BHIS	K03516			; => OBJD
+;	MOVB	<L14472+2>, R0		; get (DECEN+1)
+;	BEQ	K03560			; invulnerable 
+;	MOVB	#001, K36216		; set ELECU = 1: electroshocked
 
-;
-K03542:	.BYTE	0			; NJCOL+1 - Ninja color 0..7
-	.EVEN
-; HYPN2:
-K03544:	BICB	#177407, K04672		; COL keep PAPER color
-	BISB	K03542, K04672		; set COL from (NJCOL+1)
+; check Nina was hit by flamethrower
+;	MOVB	K41174, R0		; get (FFCOL+1)
+;	BEQ	K03560			; => HYPNO
+;	PUSH	R3
+;	MOVB	#003, R1
+;	CALL	L14472			; DECEN
+;	POP	R3
 
-; HYPNO:
-K03560:	MOVB	K41175, K03542		; restore TMPNC -> NJCOL+1
-	ASL	R3
-	ASL	R3
-	ASL	R3			; *8.
-	ADD	#L16744, R3		; + NCHRS
-	MOV	TileBufAddr, R2		; PIX buffer address
-	tst	(R2)+			; skip screen index word
+	asl	R3
+	asl	R3
+	asl	R3			; *8.
+	add	#L16744, R3		; + NCHRS
+	movb	K36264, TCuDir		; set Nina DIR
 	call	TileOver
-;
-K04104:	MOV	#K04672, R3		; get COL
-	MOV	#000020, R0		; 16.
-; COLRD:
-K04114:	NOP		;!!MUT-CMD!! "NOP" command or "MOVB R0,(R3)" command
-	MOV	(SP), R2		; restore index
-	MOVB	L26524(R2), R0		; get tile from Front tile screen
-	CLR	R3
-	BISB	R0, R3			; get byte
-	INCB	R0			; == 255. ?
-	BEQ	K04274			; yes => DRAW
-	MOV	R3, R1
-	ASL	R3
-	ASL	R3
-	ASL	R3			; *8.
-	CMPB	R0, #000345		; compare to 229.
-	BHIS	K04526			; > 229. => BUFWR: use computerized font
-	ASL	R3
-	ADD	R1, R3			; *17.
-	ADD	#K41342, R3		; + OCHRS
-	MOV	TileBufAddr, R2		; PIX buffer address
+
+; foreground tile
+TBufFore:
+	clr	R1
+	bisb	L26524(R5), R1		; R1 - foreground tile #
+	incb	R1			; +1 (!)
+	beq	TBufOut			; was 377 - skip foreground
+	cmp	R1, #345		; is it 'font' tile?
+	bhi	TBufPrint		; yes
+	; draw usual foreground tile, R1 - tile # + 1
+	mul	#17., R1		; tile is 17. bytes
+	add	#K41342-17., R1		; get fore tiles addr (compensate for +1)
+	mov	TileBufAddr, R2
 	tst	(R2)+			; skip screen index word
-;NOTE: Masks are inverted, so we don't need extra COMB on them
 	.rept	8.
-	bicb	(R3)+, (R2)
-	bisb	(R3)+, (R2)+
+	bicb	(R1)+, (R2)
+	bisb	(R1)+, (R2)+
 	.endr
-	movb	(R3), (R2)		; ZX attr byte
+	movb	(R1), (R2)		; ZX attr byte
 
-; DRAW: Copy pixels from PIX to screen; R5 = address on screen
-K04274:
-	; PPU will do that
-	mov	(SP), @TileBufAddr	; set screen index (PPU will start draw it then)
-	POP	R2			; restore index
-	JMP	DrawScrCont		; => NDRAW
+; output TilBuf to actual screen (PPU will do that)
+TBufOut:
+	mov	R5, @TileBufAddr	; set screen index (PPU will start draw it then)
+	jmp	DrawScrCont		; => NDRAW
 
-; BUFWR:
-K04526:	ADD	#<L16014-1568.>, R3	; + computerized font base address
-	CMPB	R0, #000345		; == 229. ?
-	BNE	K04544			; no => NOEL6
-	MOV	#L16014, R3		; CHARSET - computerized font base address
-K04544:	MOV	TileBufAddr, R2		; PIX buffer address
+TBufPrint:
+	asl	R1
+	asl	R1
+	asl	R1
+	add	#FontData-1568.-8., R1	; + computerized font base address
+;	CMPB	R0, #000345		; == 229. ?
+;	BNE	K04544			; no => NOEL6
+;	MOV	#FontData, R1		; CHARSET - computerized font base address
+;K04544:
+	mov	TileBufAddr, R2		; PIX buffer address
 	tst	(R2)+			; skip screen index word
-	MOVB	(R3)+, (R2)+
-	MOVB	(R3)+, (R2)+
-	MOVB	(R3)+, (R2)+
-	MOVB	(R3)+, (R2)+
-	MOVB	(R3)+, (R2)+
-	MOVB	(R3)+, (R2)+
-	MOVB	(R3)+, (R2)+
-	MOVB	(R3)+, (R2)+		; Copied char pixels to PIX buffer
-	BR	K04274			; => DRAW
+	mov	(R1)+, (R2)+
+	mov	(R1)+, (R2)+
+	mov	(R1)+, (R2)+
+	mov	(R1)+, (R2)+
+	mov	#060, (R2)+		; black on yellow color
+	br	TBufOut			; => DRAW
+
 
 ; BUFOM procedure: Draw string as tiles; R2 = string, R1 = length
 K04604:	MOV	R1, R5
@@ -432,8 +362,11 @@ K04632:	RETURN
 ; out tile with auto-masking and reflection
 ; R3 - source addr, K36264 - direction, R2 - dest addr
 TileOver:
+	mov	TileBufAddr, R2
+	tst	(R2)+				; skip screen index word
 	; use C as flag for DIR
-	tstb	K36264				; check DIR (also clears C)
+	tst	(PC)+				; check DIR (also clears C)
+TCuDir:	.word	0
 	beq	.+4
 	sec					; use mirroring then
 	.rept	8.
@@ -451,10 +384,6 @@ TileBufAddr:	.word	TileBuf		; initial position is before buffer by 9 bytes (!)
 TileBuf:	.blkb	16.*12.		; 16 tiles, first word: 0-can use, <>0 - index on screen
 TileBufEnd:				; then 8 bytes of tile data, then ZX attr byte, then not used byte
 
-;
-K04672:	.BYTE	2			; COL
-K04673:	.BYTE	0			; BAKCR
-;
 
 ; NERDR procedure: Update NEAR indicator
 K04674:	PUSH	R3
@@ -475,8 +404,8 @@ K05032:	MOV	#000032, R3		; 26. = shift from HOLD to NEAR item indicator
 	BR	K05050			; draw NEAR item
 ; Invert 4-char NEAR sign
 XRNEAR:
-	MOV	#<SCRTOP+<220.*80.>+27.>, R3	; screen address for NEAR
-	MOV	#000012, R1		; char height
+	MOV	#176.*C_SCRWID+27.+SCRTOP, R3	; screen address for NEAR
+	MOV	#000010, R1		; char height
 	MOV	#000377, R0		; XOR mask
 	MOV	R3, @#176640	; УКНЦ косвенный адрес
 K04762:	XOR	R0, @#176642	; УКНЦ	; <
@@ -500,11 +429,11 @@ K05050:
 	PUSH	R2
 	ASL	R0
 	MOV	K05254(R0), R2		; get item address
-	ADD	#<SCRTOP+<192.*80.>+1>, R3	; HELD item screen address + offset
+	ADD	#<SCRTOP+<152.*80.>+1>, R3	; HELD item screen address + offset
 	PUSH	R3
 	MOV	#176640, R5
 	MOV	R3, (R5)		; косвенный адрес
-	MOV	#000030, R1		; 24.
+	MOV	#24., R1		; DY
 K05126:	CLR	R3			; <
 	BISB	(R2)+, R3
 	MOV	R3, @#176642		; | copy pixels
@@ -692,7 +621,7 @@ K11600:	PUSH	R3			;   <
 	INC	R4
 	BIT	#000037, R4
 	BNE	K11626
-	ADD	#<800.-32.>, R2
+	ADD	#8.*C_SCRWID-32., R2
 K11626:	SOB	R1, K11600		;   repeat
 	BR	K11516			; repeat
 
@@ -706,8 +635,6 @@ K11632:	PUSH	R2
 	MOV	#176642, R2		; Адрес порта данных косвенной записи УКНЦ
 	MOV	(R3)+, R0		; #0
 	mov	R0, (R2)
-	ADD	#120, (R5)
-	mov	R0, (R2)		; Дублируем первую строку тайла
 	ADD	#120, (R5)
 	MOV	(R3)+, R0		; #1
 	mov	R0, (R2)
@@ -729,12 +656,18 @@ K11632:	PUSH	R2
 	ADD	#120, (R5)
 	mov	(R3)+, R0		; #7
 	mov	R0, (R2)
-	ADD	#120, (R5)
-	mov	R0, (R2)		; Дублируем последнюю строку тайла
 	POP	R0
 	POP	R5
 	POP	R2
 K11766:	RETURN
+
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+
 ;
 ; PANDA - Indicator panel tile sequence
 K11772:	.BYTE	010,021,004,016,021,016,016,021,005,016,021,004,011,014,022,004
@@ -744,7 +677,7 @@ K11772:	.BYTE	010,021,004,016,021,016,016,021,005,016,021,004,011,014,022,004
 	.BYTE	023,016,014,022,005,014,022,004,014,012,021,004,017,021,016,017
 	.BYTE	021,005,017,021,004,013,377
 	.EVEN
-; PANCR - Indicator panel tiles, 20. tiles, 9. bytes each
+; PANCR - Indicator panel tiles, 20. tiles (8 words each now)
 K12121:	.BYTE	000,000,000,360,000,010,000,344,000,022,000,012,000,012,000,012
 	.BYTE	000,000,000,377,000,000,000,377,000,000,000,000,000,000,000,000
 	.BYTE	000,000,000,017,000,020,000,047,000,110,000,120,000,120,000,120
@@ -814,7 +747,8 @@ K12514:	MOVB	#060, (R3)+		; <
 	CLRB	K51146			; clear TAPTT
 	CLRB	K17716			; clear BIKMR
 	CLRB	K36216			; clear ELECU
-	CLRB	K03542			; set (NJCOL+1) = 0 black
+	nop
+	nop
 	CLRB	K33540			; clear DEAD
 	CLRB	K36214			; RMDN = 0 top level
 	MOV	#<K23030+4>, K23746	; INITSTA address -> NERST
@@ -822,7 +756,10 @@ K12514:	MOVB	#060, (R3)+		; <
 	MOV	#K40520, <K25272+2>	; GLIDERP address -> VECTN+1
 	CLRB	K37662			; set SPEED = 0
 	CLRB	K36264			; set DIR = 0
-	MOV	#000240, K04114		; set NOP command
+	; MOV	#000240, K04114		; set NOP command
+	nop
+	nop
+	nop
 	MOV	#<K70632-15.>, <K13332+2>	; MAP-15 address -> RM+1
 	INCB	R0			; R0 = 1
 	MOVB	R0, <L14534+2>		; set (NRGPX+1) = 1
@@ -1518,7 +1455,9 @@ K17720:	.ASCII	/ BIKE ARRIVED /	; BIKAM
 ;
 ; Room marker $1A 032 - REDOF
 K17736:	MOV	#000240, R0		; NOP command
-K17742:	MOV	R0, K04114
+K17742: ; MOV	R0, K04114
+	nop
+	nop
 K17746:	DEC	(SP)
 	JMP	K13422			; => RETRT
 ; Room marker $1B 033 - REDON
@@ -1627,7 +1566,7 @@ K20364:	POP	R3
 	BISB	(R3)+, R0		; get Supertile number
 	PUSH	R3
 	PUSH	R2
-	CALL	K01434			; EXX
+	CALL	ExxProc			; EXX
 	ASL	R0			; *2
 	MOV	K20466(R0), R3		; get Supertile address from the table
 	POP	R2
@@ -1637,7 +1576,7 @@ K20422:	MOVB	(R3)+, (R2)+		;   <  copy tile number
 	SOB	R5, K20422		;   repeat
 	ADD	#000030, R2		;   next line
 	SOB	R1, K20416		; repeat
-	CALL	K01434			; EXX
+	CALL	ExxProc			; EXX
 	ADD	#000010, R2		; + 8.
 	DECB	K01604
 	BNE	K20364
@@ -2531,8 +2470,12 @@ K30756:	MOV	#K36212, R3		; MANPS address
 	BEQ	K31116
 	JMP	K25454			; => NXGRD
 K31116:	CLRB	K26672			; clear GDHIT
-	CMP	#000240, K04114		; NOP command
-	BEQ	K31212
+;	CMP	#000240, K04114		; NOP command
+;	BEQ	K31212
+	nop
+	nop
+	nop
+	nop
 	MOVB	042150, R0									; (!!!)
 ; NXINC:
 K31136:	INCB	R0
@@ -2843,8 +2786,8 @@ K33012:	CALL	Random			; Get random number
 	BEQ	K33012			; yes => again
 	CMPB	R0, #004		; == 4 green ?
 	BEQ	K33012			; yes => again
-	MOVB	R0, K03542		; set (NJCOL+1)
-;
+	nop
+	nop
 	MOV	#000024, R1		; 20.
 	CALL	L14472			; DECEN
 ; NICK:
@@ -3279,7 +3222,7 @@ K37524:	CALL	K36344			; EDGES
 	CALL	K37304			; SLOPQ
 	CALL	K36310			; MOVAC
 	CALL	K41000			; LEGS
-	CALL	K41176			; KEY
+	call	GetKey
 	BIT	#000010, R0		; bit 3 ?
 	BEQ	K37636
 ; SETJP: Set Jump
@@ -3313,7 +3256,9 @@ K37664:	NOP2	;CALL	K01612			; fill screen attrs??
 	MOVB	#004, K36210		; set MANA = 4
 	MOV	#000244, K36212		; set MANPS = 164.
 	MOV	#072230, <K13332+2>	; set (RM+1)
-	MOVB	#002, K03542		; set (NJCOL+1) = 2 red
+	nop
+	nop
+	nop
 K37742:	JMP	K13072			; => INISC
 ; RITSC: go one room right
 K37746:	MOV	<K13332+2>, R3		; get RM+1
@@ -3360,7 +3305,7 @@ K40112:	MOV	#000021, R1		; 17.
 K40164:	.ASCII	/@EXCELLENT@VALUE@/
 K40205:	.ASCIZ	/@YOU@HAVE@ESCAPED@/
 ; NESCP:
-K40230:	CALL	K41176			; KEY
+K40230:	call	GetKey
 	BIT	#000010, R0		; bit 3 ?
 	BEQ	K40246
 	JMP	K37556			; SETJP - set jump
@@ -3411,7 +3356,7 @@ K40520:	CMPB	K36210, #375		; MANA == 253. ?
 	BNE	K40534
 	JMP	K40012
 K40534:	CALL	K36310			; MOVAC
-	CALL	K41176			; KEY
+	call	GetKey
 	BIT	#000020, R0		; bit 4 fire ?
 	BNE	K40564
 	DECB	037662
@@ -3498,8 +3443,8 @@ K41164:	MOVB	(R3)+, (R2)+		; <
 	RETURN
 ;
 K41172:	.BYTE	0			; LEGS
-K41173:	.BYTE	0			; FFCOL
-K41174:	.BYTE	0			; FFCOL+1
+	.byte	0			; was FFCOL (K41173)
+	.byte	0			; was FFCOL+1
 K41175:	.BYTE	0			; TMPNC
 
 
@@ -3510,8 +3455,7 @@ K41175:	.BYTE	0			; TMPNC
 
 ;
 ; KEY procedure: Check if we have a key pressed, and do keymapping
-K41176:
-GETKEY:	mov	@#PpuKeys, R0
+GetKey:	mov	@#PpuKeys, R0
 	return
 
 
@@ -3644,7 +3588,7 @@ K50356:	CALL	K55630			; LFEDQ
 	ADD	R2, R3
 	TSTB	(R3)
 	BEQ	K50442			; => SINK
-	CALL	K41176			; KEY
+	call	GetKey
 	BIT	#000020, R0		; bit 4 fire ?
 	BEQ	K50430
 	MOVB	#001, K37662		; set SPEED = 1
@@ -3656,7 +3600,7 @@ K50430:	BIT	#000004, R0		; bit 2 down ?
 	BNE	K50446
 	JMP	K55262			; => SETST
 ; SINK:
-K50442:	CALL	K41176			; KEY
+K50442:	call	GetKey
 K50446:	BIT	#000002, R0		; bit 1 left ?
 	BEQ	K50536
 	MOVB	K36264, R0		; get DIR
@@ -3717,7 +3661,7 @@ K50666:	MOVB	050140, R0
 	MOV	#131131, R2
 K50716:	CALL	K51646			; HITGQ
 K50722:	CLRB	037662
-	CALL	K41176			; KEY
+	call	GetKey
 	BIT	#000020, R0		; bit 4 fire ?
 	BEQ	K50744
 	JMP	K25276
@@ -3836,7 +3780,7 @@ K51406:	MOVB	K36210, R0		; get MANA
 	MOVB	K01604, R0
 	MOVB	R0, K33473
 	MOVB	R0, K33474
-	CALL	K41176			; KEY
+	call	GetKey
 	MOV	#K33474, R3
 	BIT	#000010, R0		; bit 3 ?
 	BEQ	K51546
@@ -3856,7 +3800,7 @@ K51566:	TSTB	037662
 	MOV	#130771, R2
 K51614:	CALL	K51646			; HITGQ
 K51620:	CLRB	037662
-	CALL	K41176			; KEY
+	call	GetKey
 K51630:	BIT	#000020, R0		; bit 4 fire ?
 	BNE	K51642
 	JMP	K55262
@@ -3938,7 +3882,7 @@ K52172:	BNE	K52200
 K52200:	CMPB	R0, #310		; == 200. ?
 	BNE	K52212
 	JMP	L14674			; yes => COMPL
-K52212:	CALL	K41176			; KEY
+K52212:	call	GetKey
 	BIT	#000020, R0		; bit 4 fire ?
 	BNE	K52230
 	JMP	K53042			; => NFIRE
@@ -4198,7 +4142,7 @@ K53664:	CMPB	R0, #000005		; == 5 ?
 	BEQ	K53742			; yes => STLOL
 	JMP	K55262			; => SETST
 ; STLOL:
-K53742:	CALL	K41176			; KEY
+K53742:	call	GetKey
 	BIT	#000001, R0		; bit 0 right ?
 	BEQ	K53764			; no => NTOFR
 	MOVB	#001, K36264		; set DIR = 1
@@ -4270,7 +4214,8 @@ K54226:	MOV	#K36214, R3		; RMDN addr
 ; PIGGS:
 K54262:	MOV	R3, K36212		; set MANPS
 	ADD	R2, <K13332+2>		; (RM+1) += R2
-	CLRB	K03542			; set (NJCOL+1) = 0 black
+	nop
+	nop
 	JMP	K13072			; => INISC
 ; LEP5P:
 K54302:	CALL	K54212			; OFBOT
@@ -4345,7 +4290,7 @@ K54666:	MOVB	(R2)+, (R3)+		; <
 K54702:	MOVB	#001, -(R3)		; <
 	SOB	R1, K54702		; repeat
 ; JHGYG:
-K54710:	CALL	K41176			; KEY
+K54710:	call	GetKey
 	MOV	#K54774, R3		; LIFTU address
 	BIT	#000010, R0		; bit 3 up ?
 	BEQ	K54732
@@ -4387,7 +4332,7 @@ K55110:	MOVB	#000010, (R3)+		; <
 K55126:	MOVB	#001, -(R3)		; <
 	SOB	R1, K55126		; repeat
 ; JHGY2:
-K55134:	CALL	K41176			; KEY
+K55134:	call	GetKey
 	MOV	#K54562, R3		; LIFTD address
 	BIT	#000004, R0		; bit 2 ?
 	BNE	K55252			; no => SETV2 - set vector
@@ -4477,7 +4422,7 @@ K55534:	INCB	R0
 	INC	K36212			; increment MANPS
 ; BLOW1:
 K55546:	CALL	K55736			; LEGSW
-	CALL	K41176			; KEY
+	call	GetKey
 	BIT	#000001, R0		; bit 0 right ?
 K55562:	BNE	K55570
 	JMP	K50744			; => SETCR
@@ -4515,7 +4460,7 @@ K55674:	SUB	R3, (R4)
 K55710:	DECB	K36210			; decrement MANA
 	DEC	K36212			; decrement MANPS
 K55720:	CALL	K55736			; LEGSW
-	CALL	K41176			; KEY
+	call	GetKey
 	BIT	#000002, R0		; bit 1 ?
 	BR	K55562			; => FLOTQ
 ; LEGSW procedure
@@ -4524,95 +4469,21 @@ K55736:	MOVB	047313, K01602		; room number
 	XOR	R0, K01602		; FOOTC
 	MOVB	K01602, 047313		; room number
 	RETURN
-;
+
+
 ; K55764 = RM0		Room sequences, 246. rooms
 ; K70632 = MAP		World map, 32x28 bytes
 ; K72572 = RMS		Room sequence addresses, 246. rooms
 @include S2ROOM.MAC
 K60677 = K60640 + 37			; LFT3 lift position byte: 377 = DOWN, 0 = UP
-;
+
 ;K73546:
 @include S2SPRT.MAC
 
-; Font regular, 8x8, 8. bytes each, 96. symbols = 768. bytes
-;L06234:
-@include S2FONT.MAC
 
+	.blkb	768.
 	.blkw	114.
 
-; Меню - иди ты напрочь
-; INITHI procedure: Draw Ninja for Menu
-;L07634:	MOV	#L04120, R3		; HSPCD
-;	MOV	#L24324, R2		; BUFFD Address where prepared picture will be placed
-;L07644:	MOVB	(R3), R0		; <
-;	CMPB	R0, #173		; 123.
-;	BEQ	L07710			; exit => DRWPC
-;	CMPB	R0, #352		; 234.
-;	BEQ	L07676			; => XPAND
-;	MOV	#000001, R1
-;L07666:	MOVB	R0, (R2)+		; <
-;	SOB	R1, L07666		; repeat
-;	INC	R3
-;	BR	L07644			; repeat
-;L07676:	INC	R3
-;	CLR	R1
-;	BISB	(R3)+, R1
-;	MOVB	(R3), R0
-;	BR	L07666
-;
-; DRWPC:
-;L07710:	PUSH	R4
-;	MOV	#<SCRTOP+21.>, R3	; screen address
-;	MOV	#L24324, R2		; BUFFD Address with prepared picture
-;	MOV	#000013, R1		; 11.
-;L07742:	MOV	#000030, R4		; <
-;	PUSH	R3
-;	MOV	R3, @#176640		;   < Порт адреса косвенной записи УКНЦ
-;	MOV	#176642, R3		;     Адрес порта данных косвенной записи УКНЦ
-;L07750:	MOVB	(R2)+, R5		;     #0
-;	MOVB	L23024(R5), (R3)	;     byte mirroring
-;	ADD	#000120, @#176640	;     next line
-;	MOVB	(R2)+, R5		;     #1
-;	MOVB	L23024(R5), (R3)	;     byte mirroring
-;	ADD	#000120, @#176640	;     next line
-;	MOVB	(R2)+, R5		;     #2
-;	MOVB	L23024(R5), (R3)	;     byte mirroring
-;	ADD	#000120, @#176640	;     next line
-;	MOVB	(R2)+, R5		;     #3
-;	MOVB	L23024(R5), R5		;     byte mirroring
-;	MOVB	R5, (R3)
-;	ADD	#000120, @#176640	;     next line
-;	MOVB	R5, (R3)		;     дублируем строку в середине
-;	ADD	#000120, @#176640	;     next line
-;	MOVB	(R2)+, R5		;     #4
-;	MOVB	L23024(R5), (R3)	;     byte mirroring
-;	ADD	#000120, @#176640	;     next line
-;	MOVB	(R2)+, R5		;     #5
-;	MOVB	L23024(R5), (R3)	;     byte mirroring
-;	ADD	#000120, @#176640	;     next line
-;	MOVB	(R2)+, R5		;     #6
-;	MOVB	L23024(R5), (R3)	;     byte mirroring
-;	ADD	#000120, @#176640	;     next line
-;	MOVB	(R2)+, R5		;     #7
-;	MOVB	L23024(R5), R5		;     byte mirroring
-;	MOVB	R5, (R3)
-;	ADD	#000120, @#176640	;     next line
-;	MOVB	R5, (R3)		;     дублируем строку в конце
-;	ADD	#000120, @#176640	;     next line
-;	SOB	R4, L07750		; | repeat
-;	POP	R3
-;	INC	R3
-;	DEC	R1
-;	BNE	L07742			; repeat
-;	MOV	#130424, R2
-;	MOV	#000030, R1
-;	MOV	#000040, R4		; <
-;	POP	R4
-;	JMP	L10320			; CLSLF Clear Menu left part, and return
-;	NOP3
-;	NOP3
-;
-;
 
 ; GTBAK procedure
 L10200:	MOV	#K50110, R3		; MANBF
@@ -5193,11 +5064,11 @@ L14506:	MOV	#000000, R2		;!!MUT-ARG!!
 	PUSH	R4
 	CALL	K02056			; screen coords R2 to screen address
 	POP	R4
-	MOV	#800., R3
+	MOV	#8.*C_SCRWID, R3
 	ADD	R2, R3
 ; NRGPX:
 L14534:	MOVB	#000, R5		;!!MUT-ARG!!
-	MOV	#000012, R1		; 10. NOTE: Увеличено для БК/УКНЦ
+	MOV	#8., R1			; DY
 	MOVB	L23024(R5), R5		; mirror byte для УКНЦ
 	BIC	#177400, R5		; УКНЦ оставляем байт
 L14560:	MOV	R3, @#176640	; УКНЦ
@@ -5378,7 +5249,6 @@ L15775:
 
 ;
 ; Computerized font, 59 chars 8x8
-;L16014: 				; CHARSET
 @include S2FNT2.MAC
 ;
 @include S29DE4.MAC

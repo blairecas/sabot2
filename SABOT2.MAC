@@ -30,6 +30,8 @@ C_KEY_STOP	= 4
 TILES_DX	=: 32.
 TILES_DY	=: 18.
 
+TILE_DY		=: 8.
+
 C_PPU_INITILE	=: 1			; command - init tiles draw routine
 
 
@@ -218,22 +220,22 @@ SetVlines:
 	mov	R0, (R0)
 	add	#2, (R0)+
 	sob	R3, 10$
-	; first 24. empty lines
-	mov	#24., R3
+	; first 48. empty lines
+	mov	#48., R3
 	mov	#C_VEMPTY1, R1			; sort of empty line addr
 20$:	mov	R1, (R0)+
 	mov	R0, (R0)
 	add	#2, (R0)+
 	sob	R3, 20$
-	; 180. main lines
+	; 144. main lines (18. * 8.)
 	mov	#C_VADDR, R1
-	mov	#180., R3
+	mov	#TILES_DY*TILE_DY, R3
 30$:	mov	R1, (R0)+			; put vaddr
 	mov	R0, (R0)			; put next element addr
 	add	#2, (R0)+
 	add	#C_SCRWID, R1			; advance vaddr
 	sob	R3, 30$
-	; 60. lines of info place
+	; 48. lines of info place
 	bis	#6, -(R0)
 	tst	(R0)+
 	mov	#^B1011111110011000, (R0)+
@@ -242,19 +244,21 @@ SetVlines:
 	add	#C_SCRWID, R1			; advance vaddr
 	mov	R0, (R0)
 	add	#2, (R0)+
-	mov	#59., R3
+	mov	#47., R3
 40$:	mov	R1, (R0)+			; put vaddr
 	mov	R0, (R0)			; put next element addr
 	add	#2, (R0)+
 	add	#C_SCRWID, R1			; advance vaddr
 	sob	R3, 40$
-	; last 24. empty lines
-	mov	#24., R3
+	; last 48. empty lines
+	mov	#48., R3
 	mov	#C_VEMPTY1, R1			; sort of empty line addr
 90$:	mov	R1, (R0)+
 	mov	R0, (R0)
 	add	#2, (R0)+
 	sob	R3, 90$
+	; cycle last line for emustudio
+
 	; set lines
 	mov	(SP)+, @#272
 
@@ -291,7 +295,7 @@ SetOther:
 10$:	mov	R0, R1
 	mov	R0, R2
 	ash	#-5, R1				; divide by 32
-	mul	#10.*C_SCRWID, R1		; tile DY is 10. screen lines
+	mul	#TILE_DY*C_SCRWID, R1		; tile DY is 10. screen lines
 	bic	#^B1111111111100000, R2
 	add	R2, R1
 	add	#SCRTOP, R1
@@ -405,15 +409,11 @@ DrawTiles:
 	; copy tile data (8 bytes) to temp buf here
 	mov	(SP), R2			; temp buf addr here
 	mov	#177014, R5
-	inc	(R4)
+	inc	(R4)				; skip screen index
+	.rept	4.
 	mov	(R5), (R2)+
 	inc	(R4)
-	mov	(R5), (R2)+
-	inc	(R4)
-	mov	(R5), (R2)+
-	inc	(R4)
-	mov	(R5), (R2)+
-	inc	(R4)
+	.endr
 	mov	(R5), R0			; ZX attr byte
 	mov	R0, @#177016			; set 'ink' color
 	asr	R0
@@ -426,33 +426,13 @@ DrawTiles:
 	asl	R1
 	add	PC, R1
 	mov	ScrIdxTable-.(R1), (R4)
-	; copy temp buf
+	; copy temp buf to screen
 	mov	(SP), R2
 	mov	#C_SCRWID, R1
-	; draw tile
 	mov	#177024, R5
-	.rept	2
-	; 0
+	.rept	8.
 	clr	R3
 	bisb	(R2)+, R3
-	mov	R3, (R5)
-	add	R1, (R4)
-	; 1
-	clr	R3
-	bisb	(R2)+, R3
-	mov	R3, (R5)
-	add	R1, (R4)
-	; 2
-	clr	R3
-	bisb	(R2)+, R3
-	mov	R3, (R5)
-	add	R1, (R4)
-	; 3
-	clr	R3
-	bisb	(R2)+, R3
-	mov	R3, (R5)
-	add	R1, (R4)
-	; 4 (duplicate)
 	mov	R3, (R5)
 	add	R1, (R4)
 	.endr
@@ -488,7 +468,7 @@ BackClrTbl:	.word	^B0000000000000000, ^B0000000000000000
 		.word	^B0110011001100110, ^B0110011001100110
 		.word	^B0111011101110111, ^B0111011101110111
 TileBufAddr:	.word	0
-TempBuf:	.word	4			; 8 bytes temp tile buf
+TempBuf:	.word	4.			; 8 bytes temp tile buf
 
 HaveAY:		.word	177777
 PalAdr:		.word	0
