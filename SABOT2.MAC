@@ -266,7 +266,7 @@ SetVlines:
 SetOther:
 	mov	@#177054, Bkp054
 	; timers
-	bis	#^B0000001000000000, @#177054	; disable vsync in CPU
+	bic	#^B0000001000000000, @#177054	; enable vsync in CPU
 	bic	#^B0000000100000000, @#177054	; enable vsync in PPU
 	bic	#^B0001111110000000, @#177716	; sound init (mixer off)
 	; keyboard
@@ -397,18 +397,19 @@ InitTiles:
 DrawTiles:
 	mov	TileBufAddr, R0			; check init
 	beq	99$				; not initialized yet
-	mov	R0, -(SP)			; 2(SP) tile buf addr in CPU/2	
+	mov	R0, -(SP)			; 2(SP) - tile buf addr in CPU/2	
 	mov	PC, -(SP)			; get temp buf addr
-	add	#TempBuf-., (SP)		; (SP) - temp buf addr
-	mov	#177010, R4
+	add	#TempBuf-., (SP)		; 0(SP) - temp buf addr
+	mov	#177010, R4			; mem index
+	mov	#177014, R5			; mem data
+	mov	#177024, R3			; pix data
 	mov	#16., 91$+2			; 16. tiles max
 10$:	; tiles cycle
-	mov	2(SP), (R4)			; tile buf addr/2
-	mov	@#177014, R1			; check screen index
+	mov	2(SP), (R4)			; tile buf addr in CPU/2
+	mov	(R5), R1			; check screen index
 	bmi	90$				; nothing to draw
 	; copy tile data (8 bytes) to temp buf here
 	mov	(SP), R2			; temp buf addr here
-	mov	#177014, R5
 	inc	(R4)				; skip screen index
 	.rept	4.
 	mov	(R5), (R2)+
@@ -429,17 +430,17 @@ DrawTiles:
 	; copy temp buf to screen
 	mov	(SP), R2
 	mov	#C_SCRWID, R1
-	mov	#177024, R5
 	.rept	8.
-	clr	R3
-	bisb	(R2)+, R3
-	mov	R3, (R5)
+	clr	R0
+	bisb	(R2)+, R0
+	mov	R0, (R3)
 	add	R1, (R4)
 	.endr
 	; mark as drawn
 	mov	2(SP), (R4)
-	mov	#-1, @#177014
-90$:	add	#6., 2(SP)
+	mov	#177777, (R5)
+90$:	; cycle 
+	add	#6., 2(SP)
 91$:	dec	#000000
 	bne	10$
 	tst	(SP)+

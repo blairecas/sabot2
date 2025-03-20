@@ -59,7 +59,13 @@ STCORE:	mtps	#200
 	; set PPU to process tiles buffer
 	mov	#TileBuf/2, @#PpuData
 	.ppexe	#C_PPU_INITILE
+	; set VSync int (FpsMeter)
+	mov	@#100, Bkp100
+	mov	@#102, Bkp102
+	mov	#VsyInt, @#100
+	mov	#200, @#102
 	; go go go
+	mtps	#0
 	jmp	Start
 
 
@@ -199,6 +205,8 @@ K01611:	.byte	0
 
 ; DOPIC procedure: Show the room on the screen
 DrawScreen:
+FramesCount =: .+2
+	inc	#000000
 	; "снизу-вверх" будет быстрее, но выглядит "корявее"...
 	clr	R5				; R5 - index (!) do not touch it in drawing
 	mov	#L24324, R4			; R4 - addr in BuffD (!) do not touch it
@@ -216,7 +224,7 @@ TBufBgr:
 	clr	R1
 	bisb	L25424(R5), R1		; get tile from BUFFB: Back tile screen
 	mul	#10., R1		; tile is 10. bytes
-	add	#BackTiles, R1		; + BCHRS
+	add	#BackTiles, R1
 	; advance tile buf addr
 	mov	TileBufAddr, R3		; PIX buffer address
 	add	#12., R3		; 12. bytes for tile data
@@ -236,47 +244,33 @@ TBufBgr:
 	mov	(R1)+, (R3)+		; last byte is attr
 
 ; guard 1
-; flamethrower tiles #
-; 243..245
 TBufGuard1:
-	clr	R3
-	bisb	L30724(R5), R3
-	cmp	R3, #377
+;	clr	TOvClr				; clear tile color bis value
+	clr	R1
+	bisb	L30724(R5), R1
+	incb	R1
 	beq	TBufGuard2
-	; draw guard 1, R3 - tile #
-	asl	R3
-	asl	R3
-	asl	R3			; *8.
-	add	#K73546, R3		; GCHRS - tiles base address
-	movb	K36037, TCuDir		; set guard 1 DIR
+	movb	GuardTilesAttr(R1), TOvClr	; add guard tiles color attribute
+	asl	R1
+	asl	R1
+	asl	R1
+	add	#GuardTiles-8., R1
+	movb	K36037, TOvDir			; set guard 1 DIR
 	call	TileOver
 
 ; guard 2
 TBufGuard2:
-	clr	R3
-	bisb	L32024(R5), R3		; get tile from Enemy 1 tile screen
-	cmp	R3, #377		; tile 255. ?
-	beq	TBufNina		; yes => NINJA
-	; draw guard 2, R3 - tile #
-	asl	R3
-	asl	R3
-	asl	R3			; *8.
-	add	#K73546, R3		; + GCHRS - tiles base address
-	movb	K36040, TCuDir		; set guard 2 DIR
+	clr	R1
+	bisb	L32024(R5), R1
+	incb	R1
+	beq	TBufNina
+;	bisb	GuardTilesAttr(R1), TOvClr	; add guard tiles color attribute
+	asl	R1
+	asl	R1
+	asl	R1
+	add	#GuardTiles-8., R1
+	movb	K36040, TOvDir			; set guard 2 DIR
 	call	TileOver
-
-; Nina
-; Nina projectiles
-; 322, 323 - shuriken
-; 324, 325 - knife
-; 332, 333 - pipe
-; 334, 335 - rock, shit, etc
-; 336, 337 - wrench
-TBufNina:
-	clr	R3
-	bisb	L27624(R5), R3		; get tile from BUFFN: Ninja tile screen
-	cmp	R3, #377
-	beq	TBufFore
 
 ; check Nina shocked
 ; WILSN:
@@ -297,54 +291,82 @@ TBufNina:
 ;	CALL	L14472			; DECEN
 ;	POP	R3
 
-	asl	R3
-	asl	R3
-	asl	R3			; *8.
-	add	#L16744, R3		; + NCHRS
-	movb	K36264, TCuDir		; set Nina DIR
+; Nina
+TBufNina:
+	clr	R1
+	bisb	L27624(R5), R1
+	incb	R1
+	beq	TBufFore
+;	bisb	NinaTilesAttr(R1), TOvClr	; add Nina tiles color attribute
+	asl	R1
+	asl	R1
+	asl	R1
+	add	#NinaTiles-8., R1
+	movb	K36264, TOvDir			; set Nina DIR
 	call	TileOver
 
 ; foreground tile
 TBufFore:
 	clr	R1
-	bisb	L26524(R5), R1		; R1 - foreground tile #
-	incb	R1			; +1 (!)
-	beq	TBufOut			; was 377 - skip foreground
-	cmp	R1, #345		; is it 'font' tile?
-	bhi	TBufPrint		; yes
+	bisb	L26524(R5), R1			; R1 - foreground tile #
+	incb	R1				; +1 (!)
+	beq	TBufOut				; was 377 - skip foreground
+	cmp	R1, #345			; is it 'font' tile?
+	bhis	TBufPrint			; yes
 	; draw usual foreground tile, R1 - tile # + 1
-	mul	#17., R1		; tile is 17. bytes
-	add	#K41342-17., R1		; get fore tiles addr (compensate for +1)
+	mul	#17., R1			; tile is 17. bytes
+	add	#K41342-17., R1			; get fore tiles addr (compensate for +1)
 	mov	TileBufAddr, R2
-	tst	(R2)+			; skip screen index word
+	tst	(R2)+				; skip screen index word
 	.rept	8.
 	bicb	(R1)+, (R2)
 	bisb	(R1)+, (R2)+
 	.endr
-	movb	(R1), (R2)		; ZX attr byte
+	movb	(R1), (R2)			; ZX attr byte
 
 ; output TilBuf to actual screen (PPU will do that)
 TBufOut:
-	mov	R5, @TileBufAddr	; set screen index (PPU will start draw it then)
-	jmp	DrawScrCont		; => NDRAW
+	mov	R5, @TileBufAddr		; set screen index (PPU will start draw it then)
+	jmp	DrawScrCont			; => NDRAW
 
+; some foreground tiles are printable characters
+; R1 - foreground tile # + 1
 TBufPrint:
 	asl	R1
 	asl	R1
 	asl	R1
-	add	#FontData-1568.-8., R1	; + computerized font base address
-;	CMPB	R0, #000345		; == 229. ?
-;	BNE	K04544			; no => NOEL6
-;	MOV	#FontData, R1		; CHARSET - computerized font base address
-;K04544:
-	mov	TileBufAddr, R2		; PIX buffer address
-	tst	(R2)+			; skip screen index word
+	add	#FontData-1568.-8., R1		; + computerized font base address
+	mov	TileBufAddr, R2			; PIX buffer address
+	tst	(R2)+				; skip screen index word
 	mov	(R1)+, (R2)+
 	mov	(R1)+, (R2)+
 	mov	(R1)+, (R2)+
 	mov	(R1)+, (R2)+
-	mov	#060, (R2)+		; black on yellow color
-	br	TBufOut			; => DRAW
+	mov	#060, (R2)+			; black on yellow color
+	br	TBufOut				; => DRAW
+
+
+; out tile with auto-masking and reflection
+; R1 - source addr, TOvDir - direction
+TileOver:
+	mov	TileBufAddr, R2
+	tst	(R2)+				; skip screen index word
+	; use C as flag for DIR
+	tst	(PC)+				; check DIR (also clears C)
+TOvDir:	.word	0
+	beq	.+4
+	sec					; use mirroring then
+	.rept	8.
+	movb	(R1)+, R0			; R1 - tile byte
+	bcc	.+6				; skip mirroring if needed
+	movb	L23024(R0), R0			; mirror tile byte
+	bicb	MaskTable(R0), (R2)		; apply auto-mask
+	bisb	R0, (R2)+			; apply tile
+	.endr
+	bic	#^B1111111111000111, (R2)	; always clear 'ink' (to black color)
+	bis	(PC)+, (R2)			; set 'ink' if needed
+TOvClr:	.word	0
+	return
 
 
 ; BUFOM procedure: Draw string as tiles; R2 = string, R1 = length
@@ -359,30 +381,11 @@ K04624:	MOVB	#001, -(R3)		; <
 K04632:	RETURN
 
 
-; out tile with auto-masking and reflection
-; R3 - source addr, K36264 - direction, R2 - dest addr
-TileOver:
-	mov	TileBufAddr, R2
-	tst	(R2)+				; skip screen index word
-	; use C as flag for DIR
-	tst	(PC)+				; check DIR (also clears C)
-TCuDir:	.word	0
-	beq	.+4
-	sec					; use mirroring then
-	.rept	8.
-	movb	(R3)+, R1			; R1 - tile byte
-	bcc	.+6				; skip mirroring if needed
-	movb	L23024(R1), R1			; mirror tile byte
-	bicb	MaskTable(R1), (R2)		; apply auto-mask
-	bisb	R1, (R2)+			; apply tile
-	.endr
-	bic	#^B1111111111000111, (R2)	; clear attribute value for 'paper'
-	return
 
 ; 
-TileBufAddr:	.word	TileBuf		; initial position is before buffer by 9 bytes (!)
-TileBuf:	.blkb	16.*12.		; 16 tiles, first word: 0-can use, <>0 - index on screen
-TileBufEnd:				; then 8 bytes of tile data, then ZX attr byte, then not used byte
+TileBufAddr:	.word	TileBuf		; current tile buf addr 
+TileBuf:	.blkb	16.*12.		; buffer for 16 tile data: [index word] [0..7 data bytes] [zx attr word]
+TileBufEnd:
 
 
 ; NERDR procedure: Update NEAR indicator
@@ -486,6 +489,53 @@ MaskTable:
         .byte   360, 363, 367, 367, 376, 377, 377, 377, 374, 377, 377, 377, 376, 377, 377, 377
         .byte   370, 373, 377, 377, 376, 377, 377, 377, 374, 377, 377, 377, 376, 377, 377, 377
 
+; Nina projectiles
+; 322, 323 - shuriken
+; 324, 325 - knife
+; 332, 333 - pipe
+; 334, 335 - rock, shit, etc
+; 336, 337 - wrench
+; (!!!) but in  this table they are +1 
+;NinaTilesAttr:
+;	.byte	0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 000 - 020
+;	.byte	0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 020 - 040
+;	.byte	0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 040 - 060
+;	.byte	0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 060 - 100
+;	.byte	0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 100 - 120
+;	.byte	0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 120 - 140
+;	.byte	0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 140 - 160
+;	.byte	0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 160 - 200
+;	.byte	0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 200 - 220
+;	.byte	0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 220 - 240
+;	.byte	0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 240 - 260
+;	.byte	0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 260 - 300
+;	.byte	0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 300 - 320
+;	.byte	0, 0, 0, 7, 7, 7, 7, 0,  0, 0, 0, 7, 7, 7, 7, 7 ; 320 - 340
+;	.byte	7, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 340 - 360
+;	.byte	0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 360 - 400
+
+; guard tiles
+; 243..245 - flamethrower
+; (!!!) they are +1 in this table too
+GuardTilesAttr:
+	.byte	0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 000 - 020
+	.byte	0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 020 - 040
+	.byte	0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 040 - 060
+	.byte	0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 060 - 100
+	.byte	0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 100 - 120
+	.byte	0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 120 - 140
+	.byte	0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 140 - 160
+	.byte	0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 160 - 200
+	.byte	0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 200 - 220
+	.byte	0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 220 - 240
+	.byte	0, 0, 0, 0, 2, 2, 2, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 240 - 260
+	.byte	0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 260 - 300
+	.byte	0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 300 - 320
+	.byte	0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 320 - 340
+	.byte	0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 340 - 360
+	.byte	0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 360 - 400
+; (waste of memory to color only flamethrower, but alas..)
+
 ; PANMS - Indicator signs
 K12405:	.ASCII	/HELD/
 	.ASCII	/TIMER/
@@ -501,29 +551,65 @@ LData:	.byte	0, 016, 001, 356, 377	; 0, tapes needed, disarm missile, fence<>377
 	.even
 
 
-; prepare (clear) game screen
-PreScreen:
+; Vsync interrupt
+Bkp100:	.word	0
+Bkp102:	.word	0
+VsyInt:	; count #1
+ 	inc	(PC)+
+VsyCnt:	.word	0
+	; check for 10-sec
+	cmp	VsyCnt, #500.
+	blo	99$
+	; output FPS
+	call	FpsOutput
+	clr	FramesCount
+	clr	VsyCnt	
+99$:	rti
+
+
+; Fps output
+FpsOutput:
+	mov	R0, -(SP)
+	mov	R1, -(SP)
+	mov	R2, -(SP)
+	mov	R4, -(SP)
+	mov	R5, -(SP)
 	mov	#176640, R4
 	mov	#176642, R5
-	; init 'empty1' line 
-	mov	#C_VEMPTY1, (R4)
-	mov	#C_SCRWID/4, R3
-11$:	.rept	4
-	clr	(R5)
-	inc	(R4)
-	.endr
-	sob	R3, 11$
-	; init 'main screen' 240. lines
-	mov	#C_VADDR, (R4)
-	mov	#240., R2
-20$:	mov	#10., R3
-30$:	.rept	4
-	clr	(R5)
-	inc	(R4)
-	.endr
-	sob	R3, 30$
-	add	#C_SCRWID-40., (R4)
+	mov	(R4), -(SP)
+	;
+	mov	#144.+16.*C_SCRWID+28.+C_VADDR, (R4)
+	mov	FramesCount, R0
+	cmp	R0, #999.
+	blos	10$
+	mov	#999., R0
+10$:	mov	#3, R2
+20$:	mov	R0, R1
+	clr	R0
+	div	#10., R0			; R1 = R0:R1 mod 10.
+	call	DrawDigit
+	sub	#8.*C_SCRWID+1, (R4)
 	sob	R2, 20$
+	;
+	mov	(SP)+, (R4)
+	mov	(SP)+, R5
+	mov	(SP)+, R4
+	mov	(SP)+, R2
+	mov	(SP)+, R1
+	mov	(SP)+, R0
+	return
+
+
+; draw one digit, R1 - 0..9, (R4) - vaddr, R5 - #176642
+DrawDigit:
+	asl	R1
+	asl	R1
+	asl	R1
+	add	#116214, R1
+	.rept	8.
+	movb	(R1)+, (R5)
+	add	#C_SCRWID, (R4)
+	.endr
 	return
 
 
@@ -568,7 +654,8 @@ Start:	; init timer characters (no timer heh)
 	.=11262
 
 GSTART:	; After the briefing - clear the screen, show the indicator panel
-	call	PreScreen
+	nop
+	nop
 	nop
 	nop
 	nop
@@ -763,7 +850,11 @@ K12514:	MOVB	#060, (R3)+		; <
 	MOV	#<K70632-15.>, <K13332+2>	; MAP-15 address -> RM+1
 	INCB	R0			; R0 = 1
 	MOVB	R0, <L14534+2>		; set (NRGPX+1) = 1
+
+; DEBUG:
+;	clrb	L14472+2
 	MOVB	R0, <L14472+2>		; set (DECEN+1) = 1
+
 	MOVB	R0, K33464		; set HELD value = 1 = Shuriken
 	MOVB	R0, K33465		; set NEAR value = 1
 	MOVB	R0, K33542		; set JUMP = 1
@@ -2382,7 +2473,7 @@ K30422:	CALL	L15650			; Sound CRUNCH noise
 	MOV	#076757, R3		; DOGL2
 ; ENDGP:
 K30450:	MOV	R3, <K30534+2>
-	MOV	#036037, R3										; (!!!)
+	MOV	#K36037, R3
 	TSTB	000011(R4)
 	BPL	K30470
 	INC	R3
@@ -2932,19 +3023,21 @@ K33540:	.BYTE	0		; DEAD: 0=alive, 1=enery out, 2=time out
 
 K33542:	.BYTE	0		; JUMP
 @include S23763.MAC
-K36037:	.byte	0
-K36040:	.BYTE	0, 0
+K36037:	.byte	0		; guard 1 DIR
+K36040:	.byte	0		; guard 2 DIR
+K36041:	.byte	0		; ???
 
-;
+; (???) NOT NEEDED 
 ; G1DIS procedure
 K36042:	movb	K36037, R0
 	MOVB	K36264, K36037		; copy DIR
 	BR	K36104
-;
+; (???) NOT NEEDED
 ; G2DIS procedure
 K36056:	MOVB	K36040, R0
 	MOVB	K36264, K36040		; copy DIR
 	BR	K36104
+
 ;
 ; G1DI2 procedure: ??
 K36072:	MOVB	000012(R4), R0
@@ -4229,23 +4322,23 @@ K54302:	CALL	K54212			; OFBOT
 	MOVB	K33540, R0		; get DEAD
 	DECB	R0
 	BNE	K54346			; => TIMMY
-K54342:	MOV	#K54464, R2		; "  MISSION FAILURE  "
+	MOV	#K54464, R2		; "  MISSION FAILURE  "
 ; TIMMY:
 K54346:	MOV	#127132, R3		; BUFFO+262. address
 	CALL	K04604			; BUFOM - Draw string as tiles
 	MOVB	K17200, R0		; get BIKER
 	CMPB	R0, #000375		; == 253. ?
-	BNE	K54404			; no => ALRTD
+	BNE	10$			; no => ALRTD
 	MOV	#K17204, R2		; BIKEC
 	MOV	#L26524, R1		; BUFFO Front tile screen address
 	CALL	K40436			; DRBIK
 ; ALRTD:
-K54404:	MOV	#K46162, R2		; NINDC address
+10$:	MOV	#K46162, R2		; NINDC address
 	MOV	#L24324, R1		; BUFFD address
 	CALL	K40436			; DRBIK
 	MOV	#047534, R2		; DEDNC dead Ninja tiles -> (CHARN+1)
 	MOV	#K55224, R3		; DIING -> (VECTN+1)
-	MOVB	#036, R0		; 30. -> SPEED
+	MOVB	#200, R0		; -> SPEED
 	JMP	K55242			; => SETSP - set SPEED and vectors
 ;
 K54440:	.ASCII	/@MISSION@TERMINATED@/
@@ -4346,11 +4439,13 @@ K55134:	call	GetKey
 K55206:	DECB	K36211			; decrement MAND
 	SUB	#000040, K36212		; MANPS
 	JMP	K55262
+
 ; DIING: Dying Ninja
 K55224:	DECB	K37662			; decr SPEED
 	BEQ	K55236
 	JMP	K25276			; => ENDVC
 K55236:	JMP	L10606			; => FNISH - Finish the game
+
 ; SETSP: Set SPEED and vectors
 K55242:	MOVB	R0, K37662		; set SPEED
 ; SETVC: Set vectors
@@ -4477,7 +4572,7 @@ K55736:	MOVB	047313, K01602		; room number
 @include S2ROOM.MAC
 K60677 = K60640 + 37			; LFT3 lift position byte: 377 = DOWN, 0 = UP
 
-;K73546:
+; GuardTiles:
 @include S2SPRT.MAC
 
 
@@ -4542,11 +4637,14 @@ L10554:	POP	R4
 	.BLKW	33	;NOTE: Свободное место
 
 L10560:	.ASCIZ	/                     /	; SPCHR 21. space char
-;
+
+
 ; FNISH: Finish the game
-L10606:			;CALL	L07634			; INITHI Draw Ninja for Menu
-	nop
-	nop
+; King is dead, Hail to the King
+L10606:			
+	; CALL	L07634			; INITHI Draw Ninja for Menu
+	jmp	Start
+
 	MOVB	#000017, R1		; 15.
 	MOV	#114017, R3		; TABLE
 L10622:	MOV	#<K12423+5>, R2		; MONEY+5
@@ -5251,7 +5349,7 @@ L15775:
 ; Computerized font, 59 chars 8x8
 @include S2FNT2.MAC
 ;
-@include S29DE4.MAC
+@include S2NINA.MAC
 
 
 	; WARNING!
