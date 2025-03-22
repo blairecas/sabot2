@@ -32,7 +32,9 @@ TILES_DY	=: 18.
 
 TILE_DY		=: 8.
 
-C_PPU_INITILE	=: 1			; command - init tiles draw routine
+C_PPU_INITILE	=: 1			; init tiles draw routine
+C_PPU_PALETTE1	=: 2			; set normal (title) palette
+C_PPU_PALETTE2	=: 3			; set second (game) palette
 
 
 	.asect
@@ -195,72 +197,22 @@ ClearVdata:
 	inc	(R4)
 	sob	R0, 10$
 
-; setup lines table
-SetVlines:
-	mov	PC, R0
-	add	#Lines+7-., R0
-	bic	#7, R0				; R0 - line table start addr
-	mov	R0, -(SP)			; save it
-	mov	R0, PalAdr
-	bis	#6, (SP)			; +6 means first line descriptor have color
-	mov	#^B1011101010011000, (R0)+ 	; YRGB YRGB YRGB YRGB for colors 1st part
-	mov	#^B1111111011011100, (R0)+	; YRGB YRGB YRGB YRGB for colors 2nd part
-	clr	(R0)+				; vaddr not used for first 18 lines
-	mov	R0, (R0)
-	add	#2, (R0)
-	bis	#2, (R0)+			; +2 means next line is scale&cursor
-	mov	#^B0000000000010000, (R0)+	; black colored graph cursor
-	mov	#^B0000000000010111, (R0)+	; max luminance (xxxDDxBGR, DD: 00-640, 01-320, 10-160, 11-80)
-	clr	(R0)+				; vaddr still not needed
-	mov	R0, (R0)
-	add	#2, (R0)+			; +0 means next line is 2-word descriptor
-	; 16. not used lines
-	mov	#16., R3
-10$:	clr	(R0)+
-	mov	R0, (R0)
-	add	#2, (R0)+
-	sob	R3, 10$
-	; first 48. empty lines
-	mov	#48., R3
-	mov	#C_VEMPTY1, R1			; sort of empty line addr
-20$:	mov	R1, (R0)+
-	mov	R0, (R0)
-	add	#2, (R0)+
-	sob	R3, 20$
-	; 144. main lines (18. * 8.)
-	mov	#C_VADDR, R1
-	mov	#TILES_DY*TILE_DY, R3
-30$:	mov	R1, (R0)+			; put vaddr
-	mov	R0, (R0)			; put next element addr
-	add	#2, (R0)+
-	add	#C_SCRWID, R1			; advance vaddr
-	sob	R3, 30$
-	; 48. lines of info place
-	bis	#6, -(R0)
-	tst	(R0)+
-	mov	#^B1011111110011000, (R0)+
-	mov	#^B1111101011011001, (R0)+
-	mov	R1, (R0)+
-	add	#C_SCRWID, R1			; advance vaddr
-	mov	R0, (R0)
-	add	#2, (R0)+
-	mov	#47., R3
-40$:	mov	R1, (R0)+			; put vaddr
-	mov	R0, (R0)			; put next element addr
-	add	#2, (R0)+
-	add	#C_SCRWID, R1			; advance vaddr
-	sob	R3, 40$
-	; last 48. empty lines
-	mov	#48., R3
-	mov	#C_VEMPTY1, R1			; sort of empty line addr
-90$:	mov	R1, (R0)+
-	mov	R0, (R0)
-	add	#2, (R0)+
-	sob	R3, 90$
-	; cycle last line for emustudio
+	call	SetVLines
+	mov	-4(SP), @#272
 
-	; set lines
-	mov	(SP)+, @#272
+	; unpack red
+	mov	#TitlePicR, R0
+	mov	#177014, R1
+	call	PUnpackVram
+	; unpack green
+	mov	#TitlePicG, R0
+	mov	#177015, R1
+	call	PUnpackVram
+	; unpack blue
+	mov	#TitlePicB, R0
+	mov	#177012, R1
+	call	PUnpackVram
+
 
 ; setup other
 SetOther:
@@ -318,6 +270,8 @@ Main:	call	DrawTiles			;
 	add	R0, PC
 	jmp	Main				; 0
 	jmp	InitTiles			; 1
+	jmp	SetPalette1			; 2
+	jmp	SetPalette2			; 3
 	; ...
 
 Exit:	mtps	#200
@@ -459,6 +413,285 @@ Int4:	clr	R0
 	rti
 
 
+; setup lines table
+SetVlines:
+	mov	PC, R0
+	add	#Lines+7-., R0
+	bic	#7, R0				; R0 - line table start addr
+	mov	R0, -(SP)			; save it
+	mov	R0, PalAdr
+	bis	#6, (SP)			; +6 means first line descriptor have color
+	mov	#^B1011101010011000, (R0)+ 	; YRGB YRGB YRGB YRGB for colors 1st part
+	mov	#^B1111111011011100, (R0)+	; YRGB YRGB YRGB YRGB for colors 2nd part
+	clr	(R0)+				; vaddr not used for first 18 lines
+	mov	R0, (R0)
+	add	#2, (R0)
+	bis	#2, (R0)+			; +2 means next line is scale&cursor
+	mov	#^B0000000000010000, (R0)+	; black colored graph cursor
+	mov	#^B0000000000010111, (R0)+	; max luminance (xxxDDxBGR, DD: 00-640, 01-320, 10-160, 11-80)
+	clr	(R0)+				; vaddr still not needed
+	mov	R0, (R0)
+	add	#2, (R0)+			; +0 means next line is 2-word descriptor
+	; 16. not used lines
+	mov	#16., R3
+10$:	clr	(R0)+
+	mov	R0, (R0)
+	add	#2, (R0)+
+	sob	R3, 10$
+	; first 48. empty lines
+	mov	#48., R3
+	mov	#C_VEMPTY1, R1			; sort of empty line addr
+20$:	mov	R1, (R0)+
+	mov	R0, (R0)
+	add	#2, (R0)+
+	sob	R3, 20$
+	; 144. main lines (18. * 8.)
+	mov	R0, VLinesStart
+	mov	#C_VADDR, R1
+	mov	#TILES_DY*TILE_DY, R3
+30$:	mov	R1, (R0)+			; put vaddr
+	mov	R0, (R0)			; put next element addr
+	add	#2, (R0)+
+	add	#C_SCRWID, R1			; advance vaddr
+	sob	R3, 30$
+	; 48. lines of info place
+	bis	#6, -(R0)
+	tst	(R0)+
+	mov	R0, Palette2Addr
+	mov	#^B1011111110011000, (R0)+
+	mov	#^B1111101011011001, (R0)+
+	mov	R1, (R0)+
+	add	#C_SCRWID, R1			; advance vaddr
+	mov	R0, (R0)
+	add	#2, (R0)+
+	mov	#47., R3
+40$:	mov	R1, (R0)+			; put vaddr
+	mov	R0, (R0)			; put next element addr
+	add	#2, (R0)+
+	add	#C_SCRWID, R1			; advance vaddr
+	sob	R3, 40$
+	; last 48. empty lines
+	mov	#48., R3
+	mov	#C_VEMPTY1, R1			; sort of empty line addr
+90$:	mov	R1, (R0)+
+	mov	R0, (R0)
+	add	#2, (R0)+
+	sob	R3, 90$
+	; cycle last line for emustudio
+	mov	R1, (R0)+
+	mov	R0, (R0)
+	sub	#4, (R0)
+	add	#2, (R0)
+	tst	(SP)+
+	return
+
+
+; set palette 1 (title screen palette)
+; also copy second half of screen to the first half
+SetPalette1:
+	; fade out screen
+	call	FadeOut
+	; set palette
+	mov	Palette2Addr, R0
+	mov	#^B1011101010011000, (R0)+ 
+	mov	#^B1111111011011100, (R0)+
+	; fade in title
+	call	DuplicateScreen
+	jmp	Done
+
+
+; set palette 2 (game palette)
+; also clear first half of screen
+SetPalette2:
+	; fade out screen
+	call	FadeOut
+	; set palette
+	mov	Palette2Addr, R0
+	mov	#^B1011111110011000, (R0)+
+	mov	#^B1111101011011001, (R0)+
+	jmp	Done
+
+
+; LFSR 8-bit random (Galois), 2^8-1 cycle
+; cycle xor: 8-bit [10111000] 9-bit [110110000]
+Random:	asr	#123
+	bcc	30$
+	mov	#^B0000000010111000, R0
+	xor	R0, Random+2
+30$:	mov	Random+2, R0
+	return
+
+
+; sets vregs and saddr
+SetSAddr:
+	mov	R0, R1
+	bic	#^B1111111100001111, R1		; Y 0..15 * 16
+	ash	#-4, R1
+	mul	#12.*C_SCRWID, R1		; DY = 12.
+	bic	#^B1111111111110000, R0		; X 0..15
+	asl	R0				; 0..30
+	add	R0, R1
+	add	#C_VADDR+4, R1
+	mov	#177010, R4
+	mov	#177014, R5
+	mov	R1, (R4)
+	return
+
+
+; clear cube on first half of screen
+; R0 - s-addr
+ClearKub:
+	call	SetSAddr
+	mov	#12., R3
+10$:	clr	(R5)
+	clr	@#177012
+	inc	(R4)
+	clr	(R5)
+	clr	@#177012
+	add	#C_SCRWID-1, (R4)
+	sob	R3, 10$
+	return
+
+
+; copy cube from second half to  first half of screen
+; R0 - s-addr
+CopyKub:
+	call	SetSAddr
+	mov	#12., R3
+	add	#40., (R4)
+10$:	mov	(R5), R1
+	mov	@#177012, R0
+	sub	#40., (R4)
+	mov	R1, (R5)
+	mov	R0, @#177012
+	add	#41., (R4)
+	mov	(R5), R1
+	mov	@#177012, R0
+	sub	#40., (R4)
+	mov	R1, (R5)
+	mov	R0, @#177012
+	add	#C_SCRWID-1+40., (R4)
+	sob	R3, 10$
+	return
+
+
+; fade out screen
+FadeOut:
+	mov	#255., R2
+10$:	call	Random
+	call	ClearKub
+	sob	R2, 10$
+	clr	R0
+	call	ClearKub
+	return
+
+
+; duplicate screen
+DuplicateScreen:
+	mov	#255., R2
+10$:	call	Random
+	call	CopyKub
+	sob	R2, 10$
+	clr	R0
+	call	CopyKub
+	return
+
+
+; get byte (cpu addr) (R0) -> R1 and advance addr
+PGetB12:	
+	mov	R0, R1
+	inc	R0
+	clc
+	ror	R1
+	mov	R1, @#177010
+	bcs	10$
+	movb	@#177014, R1
+	return
+10$:	movb	@#177015, R1
+	return
+
+
+; put R0 -> byte to dest vaddr and advance it
+PPutA12 = PPutB12 + 2
+PPutB12:	
+	mov	#100000, @#177010
+	inc	PPutA12
+PPutBad:	
+	movb	R1, @#177014
+	return
+
+
+; unpacker version for vram picture unpack
+; R0 - source addr in CPU mem
+; R1 - reg addr to write output bytes (177012, 177014, 177015)
+; unpacking to vram from index 100000
+PUnpackVram:
+	; prepare
+	mov	#100000, PPutA12
+	mov	R1, PPutBad+2
+	mov	R1, 24$+2
+	; unpack
+	clr	R2
+	movb	#200, R3
+	sxt	R5
+10$:	call	50$
+	; movb	(R0)+, (R1)+
+	; sob	R2, .-2
+12$:	call	PGetB12
+	call	PPutB12
+	sob	R2, 12$
+	; 
+	aslb	R3
+	bcs	30$
+	call	50$
+20$:	; mov	R1, R4
+	; add	R5, R4
+	; movb	(R4)+, (R1)+
+	; sob	R2, .-2
+	mov	PPutA12, R4
+	add	R5, R4
+22$:	mov	R4, @#177010
+24$:	movb	@#177014, R1
+	inc	R4
+	call	PPutB12
+	sob	R2, 22$
+	;
+	aslb	R3
+	bcc	10$
+30$:	mov	#-2, R2
+	call	60$
+	incb	R2
+	bne	.+4
+40$:	return
+	swab	R2
+	mov	R2, R5
+	clrb	R5
+	; bisb	(R0)+, R5
+	call	PGetB12
+	bisb	R1, R5
+	;
+	asr	R5
+	mov	#1, R2
+	bcs	.+6
+	call	80$
+	inc	R2
+	br	20$
+50$:	incb	R2
+60$:	aslb	R3
+	bne	70$
+	; movb	(R0)+, R3
+	rol	R4				; save C flag in R4
+	call	PGetB12
+	movb	R1, R3
+	ror	R4				; restore C flag from R4
+	;
+	rolb	R3
+70$:	bcs	40$
+80$:	aslb	R3
+	rol	R2
+	br	60$
+
+
 ; data
 BackClrTbl:	.word	^B0000000000000000, ^B0000000000000000
 		.word	^B0001000100010001, ^B0001000100010001
@@ -475,12 +708,31 @@ HaveAY:		.word	177777
 PalAdr:		.word	0
 Pal1:		.word	^B1011101010011000
 Pal2:		.word	^B1111111011011100
+VLinesStart:	.word	0
+Palette2Addr:	.word	0
+
 Bkp054:		.word	0			; save 177054
 Bkp710:		.word	0			; save 177710
 Bkp:		.blkw	400			; 0-1000 addrs backup
-Lines:		.blkw	288.+16.*2+8.+4.+16.	; 304 x 2-words + 2 x 4-words + 4 x 1-word (for align) + 16. for palette change
 
+Lines:		.blkw	288.+16.*2+8.+4.+16.	; 304 x 2-words + 2 x 4-words + 4 x 1-word (for align) + 16. words for something
 ScrIdxTable:	.blkw	TILES_DX*TILES_DY	; screen index to vaddr table
+
+; title picture R
+.even
+TitlePicR:
+@includebin ./graphics/sabot2title.zxr
+
+; title picture G
+.even
+TitlePicG:
+@includebin ./graphics/sabot2title.zxg
+
+; title picture B
+.even
+TitlePicB:
+@includebin ./graphics/sabot2title.zxb
+
 
 End:
 	.end	Start

@@ -17,7 +17,10 @@ SCRTOP 		=: SCREEN+4
 TILES_DX	=: 32.
 TILES_DY	=: 18.
 
-C_PPU_INITILE	=: 1			; command - init tiles draw routine
+C_PPU_INITILE	=: 1			; init tiles draw routine
+C_PPU_PALETTE1	=: 2			; set normal (title) palette
+C_PPU_PALETTE2	=: 3			; set second (game) palette
+
 
 ; Special comments-warnings in the code:
 ; !!MUT-CMD!! - the command mutable, means other code changes it
@@ -96,6 +99,26 @@ K06706:	RORB	R5			; | <
 	SOB	R1, K06676		; repeat
 	return
 
+;ExxProc:
+;EXXALL: PUSH   R5
+;        MOV    #0,R5
+;        MOV    (SP)+,-4(PC)
+;EXXR4:  PUSH   R4
+;        MOV    #0,R4
+;        MOV    (SP)+,-4(PC)
+;EXXR3:  PUSH   R3
+;        MOV    #0,R3
+;        MOV    (SP)+,-4(PC)
+;EXXR2:  PUSH   R2
+;        MOV    #0,R2
+;        MOV    (SP)+,-4(PC)
+;EXXR1:  PUSH   R1
+;        MOV    #0,R1
+;        MOV    (SP)+,-4(PC)
+;EXA:    PUSH   R0
+;        MOV    #0,R0
+;        MOV    (SP)+,-4(PC)
+;	return
 
 ; Procedure: EXX
 ExxProc:
@@ -559,12 +582,15 @@ VsyInt:	; count #1
 VsyCnt:	.word	0
 	; check for 10-sec
 	cmp	VsyCnt, #500.
-	blo	99$
-	; output FPS
+	blo	VsyRti
+	; output FPS (in game mode)
+	tst	(PC)+
+FpsOut:	.word	0
+	beq	VsyRti
 	call	FpsOutput
 	clr	FramesCount
 	clr	VsyCnt	
-99$:	rti
+VsyRti:	rti
 
 
 ; Fps output
@@ -617,7 +643,17 @@ DrawDigit:
 ; // START
 ; //////////////////////////////////////////////////////////////////////////////
 
-Start:	; init timer characters (no timer heh)
+Start:	; title screen
+	clr	FpsOut				; disable showing FPS
+	.ppexe	#C_PPU_PALETTE1			; show title screen
+	clr	@#PpuKeys
+10$:	mov	@#PpuKeys, R0
+	beq	10$
+	clr	PpuKeys
+	; TODO: check for STOP key and exit to OS
+	.ppexe	#C_PPU_PALETTE2
+
+	; init timer characters (no timer heh)
 	mov	#K36204, R2
 	movb	#'8, (R2)+
 	movb	#'8, (R2)+
@@ -631,9 +667,9 @@ Start:	; init timer characters (no timer heh)
 	movb	4(R4), K17200
 	mov	#377, R0
 	cmpb	#377, K17200
-	bne	10$
+	bne	90$
 	mov	#1, R0
-10$:	movb	R0, K13224+2
+90$:	movb	R0, K13224+2
 	; set disarm missile
 	movb	2(R4), K11770
 	; set disable fence
@@ -654,8 +690,7 @@ Start:	; init timer characters (no timer heh)
 	.=11262
 
 GSTART:	; After the briefing - clear the screen, show the indicator panel
-	nop
-	nop
+	inc	FpsOut				; allow show FPS
 	nop
 	nop
 	nop
@@ -907,10 +942,12 @@ K13230:	MOVB	R0, 070340		; set DRFNQ
 	CLRB	K17635			; clear LETNO
 	CALL	K46120			; BUFCL Fill Ninja tile screen
 	CALL	K46150			; BUFC2 Fill Enemy 0/1 tile screens
+	; clear background buffer
 	MOV	#L25424, R3		; BUFFB Back tile screen address
 	MOV	#000440, R1		; 288. words
-K13260:	CLR	(R3)+			; <
-	SOB	R1, K13260		; repeat
+10$:	CLR	(R3)+			; <
+	SOB	R1, 10$			; repeat
+	;
 	MOV	#000440, R1		; 288. words
 	MOV	#177777, R5		; filler
 K13274:	MOV	R5, (R3)+		; <
@@ -920,9 +957,6 @@ K13274:	MOV	R5, (R3)+		; <
 	MOV	#000401, R5		; filler
 K13314:	MOV	R5, (R3)+		; <
 	SOB	R1, K13314		; repeat
-;
-		;CLR	<K01400+2>
-		;MTPS	#000000			; Enable interrupts
 ; RM:
 K13332:	MOV	#000000, R3		;!!MUT-ARG!!
 	MOVB	K36214, R0		; get RMDN room level
@@ -1554,6 +1588,7 @@ K17746:	DEC	(SP)
 ; Room marker $1B 033 - REDON
 K17754:	MOV	#110013, R0		; "MOVB R0,(R3)" command
 K17760:	BR	K17742
+
 ; Room marker $03 003 - FILLB - Fill the whole room with tile
 K17762:	MOV	(SP), R3
 	CLR	R0
@@ -1568,6 +1603,7 @@ K20004:	MOV	R0, (R3)+		; < fill 2 tiles
 	MOV	R0, (R3)+		; | fill 2 tiles
 	SOB	R1, K20004		; repeat
 	JMP	K13422
+
 ; Room marker $04 004 - ONECR - Fill one tile
 K20022:	POP	R3
 	MOVB	(R3)+, R0
@@ -1590,9 +1626,12 @@ K20056:	MOV	#000312, R0		; 202.
 	INCB	R0
 	MOVB	R0, (R3)
 	JMP	K13422
+
+; 
 ; Room marker $00 000 - HORLN - Fill horizontally W with tile
 K20120:	MOV	#000001, R2
 	BR	K20156
+
 ;
 K20126:	.WORD	153006,062206		; height = 6, tile = 326, offset lo, offset hi
 ;
@@ -1651,8 +1690,9 @@ K20326:	MOVB	R0, (R3)+		; < put tile
 ; Room marker $09 011 - ROCKS - Supertile, 8x6 tiles
 K20346:	MOV	#L25424, R2		; BUFFB Back tile screen address
 	MOV	#000003, R1
-K20356:	MOVB	#004, K01604		; <
-K20364:	POP	R3
+10$:	MOV	#004, (PC)+
+12$:	.word	4
+20$:	POP	R3
 	CLR	R0
 	BISB	(R3)+, R0		; get Supertile number
 	PUSH	R3
@@ -1662,17 +1702,17 @@ K20364:	POP	R3
 	MOV	K20466(R0), R3		; get Supertile address from the table
 	POP	R2
 	MOV	#000006, R1		; height 6
-K20416:	MOV	#000010, R5		; <  width 8.
-K20422:	MOVB	(R3)+, (R2)+		;   <  copy tile number
-	SOB	R5, K20422		;   repeat
+30$:	MOV	#000010, R5		; <  width 8.
+40$:	MOVB	(R3)+, (R2)+		;   <  copy tile number
+	SOB	R5, 40$			;   repeat
 	ADD	#000030, R2		;   next line
-	SOB	R1, K20416		; repeat
+	SOB	R1, 30$			; repeat
 	CALL	ExxProc			; EXX
 	ADD	#000010, R2		; + 8.
-	DECB	K01604
-	BNE	K20364
+	DEC	12$
+	BNE	20$
 	ADD	#000240, R2
-	SOB	R1, K20356		; repeat
+	SOB	R1, 10$			; repeat
 	DEC	(SP)
 	JMP	K13422
 
@@ -1723,6 +1763,7 @@ K24062:	ADD	#000040, R3		;!!MUT-ARG!!
 	BIC	#177400, R2		; low byte
 	SOB	R1, K24050		; repeat
 	JMP	K13422			; => RETRT
+
 ; Room marker $02 002 - BLOCK - Fill rectangle WxH with tile
 K24104:	POP	R0			;
 	CLR	R2

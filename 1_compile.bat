@@ -1,5 +1,9 @@
 @echo off
 
+rem TITLE
+rem php -f graphics\convert_img.php sabot2title.png
+rem if %ERRORLEVEL% NEQ 0 ( exit /b )
+
 rem CORE CPU
 set NAME=STCORE
 php -f ..\scripts\preprocess.php %NAME%.mac
