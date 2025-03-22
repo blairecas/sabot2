@@ -35,6 +35,9 @@ TILE_DY		=: 8.
 C_PPU_INITILE	=: 1			; init tiles draw routine
 C_PPU_PALETTE1	=: 2			; set normal (title) palette
 C_PPU_PALETTE2	=: 3			; set second (game) palette
+C_PPU_MUSIC0	=: 4			; music #0 init
+C_PPU_PLAY	=: 5			; play one frame of music
+C_PPU_MUTE	=: 6			; mute music
 
 
 	.asect
@@ -183,7 +186,13 @@ PpuStart:
 	br	30$
 20$:	clr	(R1)+
 30$:	sob	R3, 10$
-	mov	#2, (R3)			; set RTI at @#0	
+	mov	#2, (R3)			; set RTI at @#0
+
+	; unpack music routines to fixed addrs
+	mov	PC, R0
+	add	#MusicZx0-., R0
+	mov	#60000, R1
+	call	PpuUnpack
 
 ClearVdata:
 	; clear screen vdata
@@ -272,6 +281,9 @@ Main:	call	DrawTiles			;
 	jmp	InitTiles			; 1
 	jmp	SetPalette1			; 2
 	jmp	SetPalette2			; 3
+	jmp	InitMusic0			; 4
+	jmp	PlayMusic			; 5
+	jmp	MuteMusic			; 6
 	; ...
 
 Exit:	mtps	#200
@@ -314,8 +326,12 @@ KeyInt:	mov	@#177010, -(SP)
 	bis	#004, @#177014
 	br	90$
 14$:	cmp	R0, #C_KEY_SHIFT
-	bne	90$
+	bne	15$
 	bis	#020, @#177014
+	br	90$
+15$:	cmp	R0, #C_KEY_STOP
+	bne	90$
+	bis	#200, @#177014
 	br	90$
 50$:	; key released
 	bic	#^B1111111111110000, R0
@@ -692,6 +708,78 @@ PUnpackVram:
 	br	60$
 
 
+; ZX0 unpacker by reddie
+PpuUnpack:
+	clr	R2
+	movb	#200, R3
+	sxt	R5
+10$:	call	50$
+	movb	(R0)+, (R1)+
+	sob	R2, .-2
+	aslb	R3
+	bcs	30$
+	call	50$
+20$:	mov	R1, R4
+	add	R5, R4
+	movb	(R4)+, (R1)+
+	sob	R2, .-2
+	aslb	R3
+	bcc	10$
+30$:	mov	#-2, R2
+	call	60$
+	incb	R2
+	bne	.+4
+40$:	return
+	swab	R2
+	mov	R2, R5
+	clrb	R5
+	bisb	(R0)+, R5
+	asr	R5
+	mov	#1, R2
+	bcs	.+6
+	call	80$
+	inc	R2
+	br	20$
+50$:	incb	R2
+60$:	aslb	R3
+	bne	70$
+	movb	(R0)+, R3
+	rolb	R3
+70$:	bcs	40$
+80$:	aslb	R3
+	rol	R2
+	br	60$ 
+
+
+; init music #0 (if have AY device)
+InitMusic0:
+	tst	HaveAY
+	beq	99$
+	clr	R0
+	clr	R1
+	clr	R5
+	call	@60000(R5)
+99$:	jmp	Done
+
+
+; play one frame of current music
+PlayMusic:
+	tst	HaveAY
+	beq	99$
+	clr	R5
+	call	@60002(R5)
+99$:	jmp	Done
+
+
+; mute music (if have AY device)
+MuteMusic:
+	tst	HaveAY
+	beq	99$
+	clr	R5
+	call	@60004(R5)
+99$:	jmp	Done
+
+
 ; data
 BackClrTbl:	.word	^B0000000000000000, ^B0000000000000000
 		.word	^B0001000100010001, ^B0001000100010001
@@ -702,7 +790,7 @@ BackClrTbl:	.word	^B0000000000000000, ^B0000000000000000
 		.word	^B0110011001100110, ^B0110011001100110
 		.word	^B0111011101110111, ^B0111011101110111
 TileBufAddr:	.word	0
-TempBuf:	.word	4.			; 8 bytes temp tile buf
+TempBuf:	.blkw	4.			; 8 bytes temp tile buf
 
 HaveAY:		.word	177777
 PalAdr:		.word	0
@@ -721,18 +809,22 @@ ScrIdxTable:	.blkw	TILES_DX*TILES_DY	; screen index to vaddr table
 ; title picture R
 .even
 TitlePicR:
-@includebin ./graphics/sabot2title.zxr
+	@includebin ./graphics/sabot2title.zxr
 
 ; title picture G
 .even
 TitlePicG:
-@includebin ./graphics/sabot2title.zxg
+	@includebin ./graphics/sabot2title.zxg
 
 ; title picture B
 .even
 TitlePicB:
-@includebin ./graphics/sabot2title.zxb
+	@includebin ./graphics/sabot2title.zxb
 
+; music routines packed data
+.even
+MusicZx0:
+	@includebin _music.zx0.bin
 
 End:
 	.end	Start

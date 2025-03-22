@@ -20,6 +20,9 @@ TILES_DY	=: 18.
 C_PPU_INITILE	=: 1			; init tiles draw routine
 C_PPU_PALETTE1	=: 2			; set normal (title) palette
 C_PPU_PALETTE2	=: 3			; set second (game) palette
+C_PPU_MUSIC0	=: 4			; music #0 init
+C_PPU_PLAY	=: 5			; play one frame of music
+C_PPU_MUTE	=: 6			; mute music
 
 
 ; Special comments-warnings in the code:
@@ -228,6 +231,11 @@ K01611:	.byte	0
 
 ; DOPIC procedure: Show the room on the screen
 DrawScreen:
+	; check STOP key here
+	bit	#200, @#PpuKeys
+	beq	10$
+	jmp	Start
+10$:	; draw then
 FramesCount =: .+2
 	inc	#000000
 	; "снизу-вверх" будет быстрее, но выглядит "корявее"...
@@ -643,13 +651,25 @@ DrawDigit:
 ; // START
 ; //////////////////////////////////////////////////////////////////////////////
 
-Start:	; title screen
+Start:	; reset 
+	mov	#1000, SP
+	; title screen
 	clr	FpsOut				; disable showing FPS
 	.ppexe	#C_PPU_PALETTE1			; show title screen
-	clr	@#PpuKeys
-10$:	mov	@#PpuKeys, R0
+	.ppexe	#C_PPU_MUSIC0			; init title music
+	clr	@#PpuKeys	
+10$:	; wait for vsync
+	tst	VsyCnt
 	beq	10$
+	clr	VsyCnt
+	; play music
+	.ppexe	#C_PPU_PLAY
+	; check keys
+	mov	@#PpuKeys, R0
+	beq	10$
+	; start game or exit to OS
 	clr	PpuKeys
+	.ppexe	#C_PPU_MUTE			; mute music
 	; TODO: check for STOP key and exit to OS
 	.ppexe	#C_PPU_PALETTE2
 
