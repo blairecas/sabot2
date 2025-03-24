@@ -1074,10 +1074,12 @@ PARAMETERS_AY2:		.blkb	PARAM_SIZE
 			.even 
 
 ; .pt3 files data
-MusicTable:	.word	M_Music1, M_MusicEnd
+MusicTable:	.word	M_Music1, M_Music2, M_MusicEnd
 
 M_Music1:
 	@includebin ./music/reddie_sabot2.pt3
+M_Music2:
+	@includebin ./music/gogin_mario.pt3
 M_MusicEnd:
  
 	.even 

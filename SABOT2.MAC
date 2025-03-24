@@ -36,8 +36,9 @@ C_PPU_INITILE	=: 1			; init tiles draw routine
 C_PPU_PALETTE1	=: 2			; set normal (title) palette
 C_PPU_PALETTE2	=: 3			; set second (game) palette
 C_PPU_MUSIC0	=: 4			; music #0 init
-C_PPU_PLAY	=: 5			; play one frame of music
-C_PPU_MUTE	=: 6			; mute music
+C_PPU_MUSIC1	=: 5			; music #1 init
+C_PPU_PLAY	=: 6			; play one frame of music
+C_PPU_MUTE	=: 7			; mute music
 
 
 	.asect
@@ -282,8 +283,9 @@ Main:	call	DrawTiles			;
 	jmp	SetPalette1			; 2
 	jmp	SetPalette2			; 3
 	jmp	InitMusic0			; 4
-	jmp	PlayMusic			; 5
-	jmp	MuteMusic			; 6
+	jmp	InitMusic1			; 5
+	jmp	PlayMusic			; 6
+	jmp	MuteMusic			; 7
 	; ...
 
 Exit:	mtps	#200
@@ -382,7 +384,10 @@ DrawTiles:
 	mov	(SP), R2			; temp buf addr here
 	inc	(R4)				; skip screen index
 	.rept	4.
-	mov	(R5), (R2)+
+	mov	(R5), R0
+	mov	R0, (R2)+
+	swab	R0
+	mov	R0, (R2)+
 	inc	(R4)
 	.endr
 	mov	(R5), R0			; ZX attr byte
@@ -393,7 +398,7 @@ DrawTiles:
 	add	#BackClrTbl-., R0
 	mov	(R0)+, @#177020			; set 'paper' color
 	mov	(R0)+, @#177022
-	; convert screen index to vaddr index
+	; convert screen index to vaddr
 	asl	R1
 	add	PC, R1
 	mov	ScrIdxTable-.(R1), (R4)
@@ -401,9 +406,7 @@ DrawTiles:
 	mov	(SP), R2
 	mov	#C_SCRWID, R1
 	.rept	8.
-	clr	R0
-	bisb	(R2)+, R0
-	mov	R0, (R3)
+	mov	(R2)+, (R3)
 	add	R1, (R4)
 	.endr
 	; mark as drawn
@@ -762,6 +765,17 @@ InitMusic0:
 99$:	jmp	Done
 
 
+; init music #1 (game music)
+InitMusic1:
+	tst	HaveAY
+	beq	99$
+	mov	#1, R0
+	mov	#1, R1
+	clr	R5
+	call	@60000(R5)
+99$:	jmp	Done
+
+
 ; play one frame of current music
 PlayMusic:
 	tst	HaveAY
@@ -790,7 +804,7 @@ BackClrTbl:	.word	^B0000000000000000, ^B0000000000000000
 		.word	^B0110011001100110, ^B0110011001100110
 		.word	^B0111011101110111, ^B0111011101110111
 TileBufAddr:	.word	0
-TempBuf:	.blkw	4.			; 8 bytes temp tile buf
+TempBuf:	.blkw	8.
 
 HaveAY:		.word	177777
 PalAdr:		.word	0

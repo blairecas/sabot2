@@ -21,8 +21,9 @@ C_PPU_INITILE	=: 1			; init tiles draw routine
 C_PPU_PALETTE1	=: 2			; set normal (title) palette
 C_PPU_PALETTE2	=: 3			; set second (game) palette
 C_PPU_MUSIC0	=: 4			; music #0 init
-C_PPU_PLAY	=: 5			; play one frame of music
-C_PPU_MUTE	=: 6			; mute music
+C_PPU_MUSIC1	=: 5			; music #1 init
+C_PPU_PLAY	=: 6			; play one frame of music
+C_PPU_MUTE	=: 7			; mute music
 
 
 ; Special comments-warnings in the code:
@@ -276,7 +277,7 @@ TBufBgr:
 
 ; guard 1
 TBufGuard1:
-;	clr	TOvClr				; clear tile color bis value
+	clr	TOvClr				; clear tile color bis value
 	clr	R1
 	bisb	L30724(R5), R1
 	incb	R1
@@ -581,6 +582,7 @@ L9Ptr:	.word	0
 LData:	.byte	0, 016, 001, 356, 377	; 0, tapes needed, disarm missile, fence<>377, bike==377
 	.even
 
+NowPlaying:	.word	0
 
 ; Vsync interrupt
 Bkp100:	.word	0
@@ -658,11 +660,10 @@ Start:	; reset
 	.ppexe	#C_PPU_PALETTE1			; show title screen
 	.ppexe	#C_PPU_MUSIC0			; init title music
 	clr	@#PpuKeys	
-10$:	; wait for vsync
+10$:	; vsync
 	tst	VsyCnt
 	beq	10$
 	clr	VsyCnt
-	; play music
 	.ppexe	#C_PPU_PLAY
 	; check keys
 	mov	@#PpuKeys, R0
