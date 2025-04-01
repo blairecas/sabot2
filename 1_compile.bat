@@ -1,8 +1,8 @@
 @echo off
 
 rem TITLE
-php -f graphics\convert_img.php sabot2title.png
-if %ERRORLEVEL% NEQ 0 ( exit /b )
+rem php -f graphics\convert_img.php sabot2title.png
+rem if %ERRORLEVEL% NEQ 0 ( exit /b )
 
 rem MUSIC
 set NAME=music

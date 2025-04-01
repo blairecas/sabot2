@@ -15,5 +15,8 @@
 	"explorer.sortOrder": "type",
 	"editor.wordBasedSuggestions": "off",
 	"files.autoGuessEncoding": false,
-	"files.encoding": "windows1251"	
+	"files.encoding": "windows1251",
+	"files.associations": {
+		"RUBI.C": "cpp"
+	}
 }

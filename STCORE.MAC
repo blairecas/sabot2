@@ -240,26 +240,41 @@ DrawScreen:
 FramesCount =: .+2
 	inc	#000000
 	; "снизу-вверх" будет быстрее, но выглядит "корявее"...
+	; ну тут начались извраты, как уменьшить прохождение 1100(8) байт экрана
+	; на удивление этот вариант быстрей чем проходить их побайтно
+	; ибо как-правило бОльшая часть экрана не изменяется совсем
 	clr	R5				; R5 - index (!) do not touch it in drawing
-	mov	#L24324, R4			; R4 - addr in BuffD (!) do not touch it
+	mov	#BuffD, R4			; R4 - addr in BuffD (!) do not touch it
 DrawScrCycle:
-	tstb	(R4)+				; check byte in BUFFD
-	bne	TBufBgr				; drawing this tile =>
-DrawScrCont:
+	mov	(R4)+, R0			; (!) WORD size
+	bne	DrawScrWord
 	inc	R5
-	cmp	R5, #TILES_DX*TILES_DY
-	bne	DrawScrCycle
+	inc	R5
+DrawScrCont:
+	cmp	R4, #TILES_DX*TILES_DY+BuffD
+	blo	DrawScrCycle
 	return
+DrawScrWord:
+	tstb	R0
+	beq	10$
+	call	TBufBgr
+10$:	inc	R5
+	tstb	-1(R4)
+	beq	20$
+	call	TBufBgr
+20$:	inc	R5
+	br	DrawScrCont
+
 
 ; background tile
 TBufBgr:
 	clr	R1
-	bisb	L25424(R5), R1		; get tile from BUFFB: Back tile screen
-	mul	#10., R1		; tile is 10. bytes
+	bisb	L25424(R5), R1			; get tile from BUFFB: Back tile screen
+	mul	#10., R1			; tile is 10. bytes
 	add	#BackTiles, R1
 	; advance tile buf addr
-	mov	TileBufAddr, R3		; PIX buffer address
-	add	#12., R3		; 12. bytes for tile data
+	mov	TileBufAddr, R3			; PIX buffer address
+	add	#12., R3			; 12. bytes for tile data
 	cmp	R3, #TileBufEnd
 	blo	10$
 	mov	#TileBuf, R3
@@ -268,12 +283,12 @@ TBufBgr:
 	tst	(R3)
 	bpl	.-2
 	; put background
-	tst	(R3)+			; skip screen index
+	tst	(R3)+				; skip screen index
 	mov	(R1)+, (R3)+
 	mov	(R1)+, (R3)+
 	mov	(R1)+, (R3)+
 	mov	(R1)+, (R3)+
-	mov	(R1)+, (R3)+		; last byte is attr
+	mov	(R1)+, (R3)+			; last byte is attr
 
 ; guard 1
 TBufGuard1:
@@ -346,20 +361,20 @@ TBufFore:
 	cmp	R1, #345			; is it 'font' tile?
 	bhis	TBufPrint			; yes
 	; draw usual foreground tile, R1 - tile # + 1
-	mul	#17., R1			; tile is 17. bytes
-	add	#K41342-17., R1			; get fore tiles addr (compensate for +1)
+	mul	#18., R1			; tile is 9 words
+	add	#ForeTiles-18., R1		; get fore tiles addr (compensate for +1)
 	mov	TileBufAddr, R2
 	tst	(R2)+				; skip screen index word
-	.rept	8.
-	bicb	(R1)+, (R2)
-	bisb	(R1)+, (R2)+
+	.rept	4.
+	bic	(R1)+, (R2)
+	bis	(R1)+, (R2)+
 	.endr
-	movb	(R1), (R2)			; ZX attr byte
+	mov	(R1), (R2)			; ZX attr
 
 ; output TilBuf to actual screen (PPU will do that)
 TBufOut:
 	mov	R5, @TileBufAddr		; set screen index (PPU will start draw it then)
-	jmp	DrawScrCont			; => NDRAW
+	return
 
 ; some foreground tiles are printable characters
 ; R1 - foreground tile # + 1
@@ -647,6 +662,31 @@ DrawDigit:
 	add	#C_SCRWID, (R4)
 	.endr
 	return
+
+
+; keys -> R0
+GetKey:	mov	@#PpuKeys, R0
+	return
+
+
+; Clear buffers
+; BUFCL procedure: Fill Ninja tile screen
+ClearBuffNina:
+	MOV	#L27624, R3			; BUFFN Ninja tile screen address
+	MOV	#000110, R1			; 72. * 4 = 288. words
+ClearBuff:	
+	MOV	#177777, R5			; filler
+10$:	MOV	R5, (R3)+			; <
+	MOV	R5, (R3)+
+	MOV	R5, (R3)+
+	MOV	R5, (R3)+
+	SOB	R1, 10$				; repeat
+	RETURN
+; BUFC2 procedure: Fill Enemy 0/1 tile screens
+ClearBuffGuards:	
+	MOV	#L30724, R3			; BUFG1 Enemy 0 tile screen address
+	MOV	#000220, R1			; 144.
+	BR	ClearBuff			; fill Enemy 0/1 tile screens
 
 
 ; //////////////////////////////////////////////////////////////////////////////
@@ -961,8 +1001,8 @@ K13224:	MOVB	#001, R0		;!!MUT-ARG!!
 ; JIRRT:
 K13230:	MOVB	R0, 070340		; set DRFNQ
 	CLRB	K17635			; clear LETNO
-	CALL	K46120			; BUFCL Fill Ninja tile screen
-	CALL	K46150			; BUFC2 Fill Enemy 0/1 tile screens
+	CALL	ClearBuffNina		; BUFCL Fill Ninja tile screen
+	CALL	ClearBuffGuards		; BUFC2 Fill Enemy 0/1 tile screens
 	; clear background buffer
 	MOV	#L25424, R3		; BUFFB Back tile screen address
 	MOV	#000440, R1		; 288. words
@@ -976,8 +1016,8 @@ K13274:	MOV	R5, (R3)+		; <
 	MOV	#L24324, R3		; BUFFD
 	MOV	#000440, R1		; 288. words
 	MOV	#000401, R5		; filler
-K13314:	MOV	R5, (R3)+		; <
-	SOB	R1, K13314		; repeat
+10$:	MOV	R5, (R3)+		; <
+	SOB	R1, 10$			; repeat
 ; RM:
 K13332:	MOV	#000000, R3		;!!MUT-ARG!!
 	MOVB	K36214, R0		; get RMDN room level
@@ -1417,28 +1457,47 @@ K16264:	MOVB	(R4)+, (R3)+		; | <
 	POP	R2
 	SOB	R1, K16260		; repeat
 	JMP	K13422
+
 ; ??? 3x3 tiles
+; treasure chest
 K16306:	.BYTE	026,027,030
 	.BYTE	031,032,033
 	.BYTE	034,035,036
+
 ; ??? 2x2 tiles
+; hidden ladder
 K16317:	.BYTE	037,037
 	.BYTE	037,037
 	.EVEN
-;
+
 ; Room marker $1F 037 - ??? 2x2 tiles
-K16324:	MOV	#K16317, R4		; copy from
-	MOVB	#002, K01604		; width = 2
-	MOV	#000002, R1		; height = 2
-	MOV	#064235, R3
-	BR	K16432			; Copy tiles
+; room above infinite energy room, hidden ladder
+K16324:	; we will NOT hide ladder - let users know about room below
+	br	K16466
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+;	MOV	#K16317, R4		; copy from
+;	MOVB	#002, K01604		; width = 2
+;	MOV	#000002, R1		; height = 2
+;	MOV	#064235, R3
+;	BR	K16432			; Copy tiles
+
 ; Room marker $1D 035 - ??? 3x3 tiles
+; infinite energy room - treasure chest
 K16350:	CLRB	<L14472+2>		; clear (DECEN+1)
 	MOV	#K16306, R4		; copy from
 	MOVB	#003, K01604		; width = 3
 	MOV	#000003, R1		; height = 3
 	MOV	#064040, R3
 	BR	K16432			; Copy tiles
+
 ; Room marker $13 023 - Moon 2x2 tiles
 K16400:	MOV	#062245, R3
 	CMPB	#001, @#125555
@@ -1446,6 +1505,7 @@ K16400:	MOV	#062245, R3
 	MOV	#K16474, R4		; copy from
 	MOVB	#002, K01604		; width = 2
 	MOV	#000002, R1
+
 ; Entry point: Copy tiles; K01604 = width, R1 = height, R4 = address to copy from
 K16432:	MOV	#000040, R2		; 32. = row width
 	ADD	#043310, R3		; + base address
@@ -1458,9 +1518,11 @@ K16452:	MOVB	(R4)+, (R3)+		; | < copy tile
 	ADD	R2, R3
 	SOB	R1, K16444		; repeat
 	POP	R5
+
 ; NWUKL:
 K16466:	DEC	(SP)
 	JMP	K13422
+
 ; Moon in tiles, 2x2 tiles
 K16474:	.BYTE	032,033
 	.BYTE	034,035
@@ -1949,12 +2011,12 @@ K24746:	.BYTE	041, 255		; PLAPS
 K24762:	.BYTE	000, 000		; DEFGH
 ;
 ; NXMAN:
-K24764:	CALL	K46120			; BUFCL Fill Ninja tile screen
+K24764:	CALL	ClearBuffNina		; BUFCL Fill Ninja tile screen
 	MOV	#L24324, R3		; BUFFD
 	MOV	#000220, R1
-K25000:	CLR	(R3)+			; <
+10$:	CLR	(R3)+			; <
 	CLR	(R3)+			; |
-	SOB	R1, K25000		; repeat
+	SOB	R1, 10$			; repeat
 K25006:	MOV	#000001, R1
 K25012:	MOV	#L30724, R3		;WARN Enemy 0 tile screen address
 	SUB	#004400, R3
@@ -2018,7 +2080,7 @@ K25272:	JMP	@#000000		;!!MUT-ARG!!
 ; ENDVC:
 K25276:	CALL	K36266			; MANDR
 	CALL	K36220			; MANAR
-	CALL	K46150			; BUFC2 Fill Enemy 0/1 tile screens
+	CALL	ClearBuffGuards			; BUFC2 Fill Enemy 0/1 tile screens
 	MOVB	K36211, R0		; get MAND
 	ADD	#000007, R0		; + 7.
 	CMPB	R0, #000010		; == 8. ?
@@ -2623,23 +2685,44 @@ K30756:	MOV	#K36212, R3		; MANPS address
 	BEQ	K31116
 	JMP	K25454			; => NXGRD
 K31116:	CLRB	K26672			; clear GDHIT
+
 ;	CMP	#000240, K04114		; NOP command
 ;	BEQ	K31212
+	br	10$
 	nop
 	nop
 	nop
 	nop
-	MOVB	042150, R0									; (!!!)
+; treasure chest flashing attrs
+;	MOVB	042150, R0									; (!!!)
 ; NXINC:
-K31136:	INCB	R0
-	CMPB	R0, #000026		; 22.
-	BEQ	K31136
-	CMPB	R0, #000030		; 24.
-	BNE	K31160
-	MOV	#000023, R0
-K31160:	MOVB	R0, 042150									; (!!!)
-	MOVB	R0, 042171									; (!!!)
-	MOVB	R0, 042212									; (!!!)
+;K31136:	INCB	R0
+;	CMPB	R0, #000026		; 22.
+;	BEQ	K31136
+;	CMPB	R0, #000030		; 24.
+;	BNE	K31160
+;	MOV	#000023, R0
+;K31160:	MOVB	R0, 042150									; (!!!)
+;	MOVB	R0, 042171									; (!!!)
+;	MOVB	R0, 042212									; (!!!)
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+10$:
+
 	MOVB	#001, R0
 	MOV	#125150, R3									; (!!!)
 	MOVB	R0, (R3)+
@@ -2926,12 +3009,22 @@ K32736:	MOV	K36212, R3		; get MANPS
 	CMPB	(R3), #000212
 	BNE	K32764
 	MOV	#000030, R0
-K32764:	MOVB	R0, 046013									; (!!!)
-	MOVB	R0, 046034									; (!!!)
-	MOVB	R0, 046055									; (!!!)
+K32764:
+	; set bike (lower 3 tiles) colors (for what???)
+;	mov	R0, K46013
+;	mov	R0, K46034
+;	mov	R0, K46055
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	;
 	CALL	DrawScreen		; DOPIC - Show the room on the screen
 	TSTB	K36216			; check ELECU
 	BEQ	K33052
+
 ; NICK2: Set Ninja to random color, but not blue or green
 K33012:	CALL	Random			; Get random number
 	BIC	#177770, R0		; 0..7
@@ -3559,85 +3652,70 @@ K40742:	DECB	K36214			; decr RMDN room level
 	ADD	#001100, R3		; + 576.
 	MOV	#177740, R2		; up one level
 	JMP	K54262			; => PIGGS
+
 ; LEGS procedure
 K41000:	MOVB	046775, K01602		; room number
 	MOV	#000233, R0
 	XOR	R0, K01602
 	MOVB	K01602, 046775		; room number
-	ADD	#000022, <K41150+2>	; + 18.
+
+; Legs copy tiles from 4 legs positions
+; advance legs
+	ADD	#000022, K41150+2	; + 18.
 	MOVB	K41172, R0		; get LEGP
 	INCB	R0
 	CMPB	R0, #004		; == 4 ?
 	BNE	K41144
-	MOV	#047030, <K41150+2>
-	MOV	#000001, R5		; sound duration = 1
-	CMPB	050164, #000376
-	BEQ	K41074
-	MOV	#000012, R5		; sound duration = 10.
-; Sound
-K41074:	CLR	R0			; < значение для порта 177716 БК
-	MOV	#100, R2		;   бит звука
-K41100:	XOR	R2, R0
-	NOP2	;MOV	R0, @#177716
-	XOR	R2, R0
-	NOP2	;MOV	R0, @#177716
-	CLR	R0
-	XOR	R2, R0
-	NOP2	;MOV	R0, @#177716
-	XOR	R2, R0
-	NOP2	;MOV	R0, @#177716
-	SOB	R5, K41074		; repeat
-	NOP3
+	MOV	#K47030, K41150+2
+
+;	MOV	#000001, R5		; sound duration = 1
+;	CMPB	050164, #000376
+;	BEQ	K41074
+;	MOV	#000012, R5		; sound duration = 10.
 ;
-K41144:	MOVB	R0, K41172		; set LEGP
-K41150:	MOV	#000000, R3		;!!MUT-ARG!!
-	MOV	#047006, R2
-	MOV	#000022, R1		; 18.
-K41164:	MOVB	(R3)+, (R2)+		; <
-	SOB	R1, K41164		; repeat
-	RETURN
+; TODO Sound
+;K41074:
+;	CLR	R0			; < значение для порта 177716 БК
+;	MOV	#100, R2		;   бит звука
+;K41100:	XOR	R2, R0
+;	NOP2	;MOV	R0, @#177716
+;	XOR	R2, R0
+;	NOP2	;MOV	R0, @#177716
+;	CLR	R0
+;	XOR	R2, R0
+;	NOP2	;MOV	R0, @#177716
+;	XOR	R2, R0
+;	NOP2	;MOV	R0, @#177716
+;	SOB	R5, K41074		; repeat
+;	NOP3
+
+	clr	R0
+K41144:	movb	R0, K41172		; set LEGP
+K41150:	mov	#000000, R3		;!!MUT-ARG!! (!!!) must be even addr
+	mov	#K47006, R2		; fortunately leg addrs ARE even
+	mov	#4, R1			; 18. leg tiles (9. words)
+10$:	mov	(R3)+, (R2)+		; <
+	mov	(R3)+, (R2)+		; <
+	sob	R1, 10$			; repeat
+	mov	(R3)+, (R2)+
+	return
 ;
-K41172:	.BYTE	0			; LEGS
+K41172:	.byte	0			; LEGS
 	.byte	0			; was FFCOL (K41173)
 	.byte	0			; was FFCOL+1
 K41175:	.BYTE	0			; TMPNC
 
 
-	; WARNING!
-	.if NE 41176-.
-	.error Addresses (41176) not in place
+; Foreground tiles
+@include S2TILF.MAC
+
+	; WARNING!!!
+	.if LT 46162-.
+	.error Addresses (46162) not in place
 	.endc 
 
-;
-; KEY procedure: Check if we have a key pressed, and do keymapping
-GetKey:	mov	@#PpuKeys, R0
-	return
+	.=46162
 
-
-	; (!) EMPTY SPACE
-	.=41342
-
-;K41342:
-@include S242E2.MAC
-;
-
-; BUFCL procedure: Fill Ninja tile screen
-K46120:	MOV	#L27624, R3		; BUFFN Ninja tile screen address
-	MOV	#000110, R1		; 72. * 4 = 288. words
-K46130:	MOV	#177777, R5		; filler
-K46134:	MOV	R5, (R3)+		; <
-	MOV	R5, (R3)+
-	MOV	R5, (R3)+
-	MOV	R5, (R3)+
-	SOB	R1, K46134		; repeat
-	RETURN
-;
-; BUFC2 procedure: Fill Enemy 0/1 tile screens
-K46150:	MOV	#L30724, R3		; BUFG1 Enemy 0 tile screen address
-	MOV	#000220, R1		; 144.
-	BR	K46130			; fill Enemy 0/1 tile screens
-
-;
 ;K46162:
 @include S24C72.MAC
 ;
@@ -4266,16 +4344,18 @@ K53542:	CMPB	R0, #005		; == 5. ?
 	JMP	K55246			; => SETVC - set vectors
 ; NCICK:
 K53606:	JMP	K25276			; => ENDVC
+
 ; SETLG procedure
-K53612:	MOV	#047030, R3		; LEG1 address
-	MOV	R3, <K41150+2>
-	MOV	#047006, R2
-	MOV	#000022, R1		; 18.
-K53632:	MOVB	(R3)+, (R2)+		; <
-	SOB	R1, K53632		; repeat
+K53612:	MOV	#K47030, R3		; LEG1 address
+	MOV	R3, K41150+2
+	MOV	#K47006, R2
+	MOV	#000011, R1		; 18. (9 words)
+10$:	mov	(R3)+, (R2)+		; <
+	sob	R1, 10$			; repeat
 	CLRB	K41172			; set LEGP = 0
 	RETURN
 	NOP1
+
 ; LADDP:
 K53646:	MOVB	050156, R0		; get (MANBF+38.)
 	TSTB	K36264			; check DIR
@@ -5407,23 +5487,22 @@ L15775:
 	.BYTE	070,001,010, 062,002,004, 064,010,002
 	.BYTE	066,004,001, 065,001,020
 
-;
 ; Computerized font, 59 chars 8x8
 @include S2FNT2.MAC
 ;
 @include S2NINA.MAC
-
 
 	; WARNING!
 	.if NE 122624-.
 	.error Addresses (122624) not in place
 	.endc 
 
-
 ; Reflection table, but starting from 128., 256. bytes; see K06660
 L22624:	.blkb	200
 L23024:	.blkb	1300
-; Tile screen 32x18 = 576. bytes; also used as a buffer for Ninja picture for Menu
+
+; Tile screen 32x18 = 576. bytes
+BuffD:
 L24324:	.blkb	1100			; BUFFD - Contact tile screen address
 ; Tile screen 32x18 = 576. bytes
 L25424:	.blkb	1100			; BUFFB - Back tile screen address
@@ -5436,21 +5515,4 @@ L30724:	.blkb	1100			; BUFFG1 - Enemy 0 tile screen address
 ; Tile screen 32x18 = 576. bytes
 L32024:	.blkb	1100			; BUFFG2 - Enemy 1 tile screen address
 
-; Reflection table, but starting from 128., 256. bytes; see K06660
-;L22624:	;.BLKB	256.
-;L23024 = L22624 + 200
-; Tile screen 32x18 = 576. bytes; also used as a buffer for Ninja picture for Menu
-;L24324 = 124324			; BUFFD - Contact tile screen address
-; Tile screen 32x18 = 576. bytes
-;L25424 = 125424			; BUFFB - Back tile screen address
-; Tile screen 32x18 = 576. bytes
-;L26524 = 126524			; BUFFO - Front tile screen address
-; Tile screen 32x18 = 576. bytes
-;L27624 = 127624			; BUFFN - Ninja tile screen address
-; Tile screen 32x18 = 576. bytes
-;L30724 = 130724			; BUFFG1 - Enemy 0 tile screen address
-; Tile screen 32x18 = 576. bytes
-;L32024 = 132024			; BUFFG2 - Enemy 1 tile screen address
-
-;------------------------------------------------------------------------------
 	.END	STCORE
