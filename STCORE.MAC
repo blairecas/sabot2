@@ -88,19 +88,23 @@ Random:	asr	#123
 
 ; Preparing reflection table, but starting from 128.
 PrepMirror:
-	MOV	#000200, R4		; ^B10000000 = 200 = 128.
+	MOV	#000200, R4			; ^B10000000 = 200 = 128.
 	CLR	R0
-	MOV	#000400, R1		; 256.
-	MOV	#L22624, R3		; REFBF table address
-K06676:	MOVB	#000010, R2		; <  8.
+	MOV	#000400, R1			; 256.
+	MOV	#ReflectionTable-200, R3	; REFBF table address
+K06676:	MOVB	#000010, R2			; <  8.
 	CLR	R5
 	BISB	R4, R5
-K06706:	RORB	R5			; | <
-	ROLB	R0			; | |
-	SOB	R2, K06706		; | repeat
+K06706:	RORB	R5				; | <
+	ROLB	R0				; | |
+	SOB	R2, K06706			; | repeat
 	MOVB	R0, (R3)+
 	INCB	R4
-	SOB	R1, K06676		; repeat
+	SOB	R1, K06676			; repeat
+	; clear additional 1100 bytes
+	mov	#1100, R1
+	clrb	(R3)+
+	sob	R1, .-2
 	return
 
 ;ExxProc:
@@ -269,7 +273,7 @@ DrawScrWord:
 ; background tile
 TBufBgr:
 	clr	R1
-	bisb	L25424(R5), R1			; get tile from BUFFB: Back tile screen
+	bisb	BuffB(R5), R1			; get tile from BUFFB: Back tile screen
 	mul	#10., R1			; tile is 10. bytes
 	add	#BackTiles, R1
 	; advance tile buf addr
@@ -294,7 +298,7 @@ TBufBgr:
 TBufGuard1:
 	clr	TOvClr				; clear tile color bis value
 	clr	R1
-	bisb	L30724(R5), R1
+	bisb	BuffG1(R5), R1
 	incb	R1
 	beq	TBufGuard2
 	movb	GuardTilesAttr(R1), TOvClr	; add guard tiles color attribute
@@ -308,7 +312,7 @@ TBufGuard1:
 ; guard 2
 TBufGuard2:
 	clr	R1
-	bisb	L32024(R5), R1
+	bisb	BuffG2(R5), R1
 	incb	R1
 	beq	TBufNina
 ;	bisb	GuardTilesAttr(R1), TOvClr	; add guard tiles color attribute
@@ -341,7 +345,7 @@ TBufGuard2:
 ; Nina
 TBufNina:
 	clr	R1
-	bisb	L27624(R5), R1
+	bisb	BuffN(R5), R1
 	incb	R1
 	beq	TBufFore
 ;	bisb	NinaTilesAttr(R1), TOvClr	; add Nina tiles color attribute
@@ -355,7 +359,7 @@ TBufNina:
 ; foreground tile
 TBufFore:
 	clr	R1
-	bisb	L26524(R5), R1			; R1 - foreground tile #
+	bisb	BuffO(R5), R1			; R1 - foreground tile #
 	incb	R1				; +1 (!)
 	beq	TBufOut				; was 377 - skip foreground
 	cmp	R1, #345			; is it 'font' tile?
@@ -406,7 +410,7 @@ TOvDir:	.word	0
 	.rept	8.
 	movb	(R1)+, R0			; R1 - tile byte
 	bcc	.+6				; skip mirroring if needed
-	movb	L23024(R0), R0			; mirror tile byte
+	movb	ReflectionTable(R0), R0		; mirror tile byte
 	bicb	MaskTable(R0), (R2)		; apply auto-mask
 	bisb	R0, (R2)+			; apply tile
 	.endr
@@ -656,7 +660,7 @@ DrawDigit:
 	asl	R1
 	asl	R1
 	asl	R1
-	add	#116214, R1
+	add	#FontData+128., R1
 	.rept	8.
 	movb	(R1)+, (R5)
 	add	#C_SCRWID, (R4)
@@ -672,7 +676,7 @@ GetKey:	mov	@#PpuKeys, R0
 ; Clear buffers
 ; BUFCL procedure: Fill Ninja tile screen
 ClearBuffNina:
-	MOV	#L27624, R3			; BUFFN Ninja tile screen address
+	MOV	#BuffN, R3			; BUFFN Ninja tile screen address
 	MOV	#000110, R1			; 72. * 4 = 288. words
 ClearBuff:	
 	MOV	#177777, R5			; filler
@@ -684,7 +688,7 @@ ClearBuff:
 	RETURN
 ; BUFC2 procedure: Fill Enemy 0/1 tile screens
 ClearBuffGuards:	
-	MOV	#L30724, R3			; BUFG1 Enemy 0 tile screen address
+	MOV	#BuffG1, R3			; BUFG1 Enemy 0 tile screen address
 	MOV	#000220, R1			; 144.
 	BR	ClearBuff			; fill Enemy 0/1 tile screens
 
@@ -890,14 +894,28 @@ K12454:	; print timer ??? values
 	MOV	#K36204, R3		; TIMER value 3-char
 	MOV	#000003, R1		; 3.
 	CALL	K01704			; PRINT string
-	;
-	MOV	L9Ptr, R3		; get LVPTR
-	CLR	R2
-	BISB	000001(R3), R2		; get NTPND byte - tapes needed
-	br	K12504			; BEQ	K12504			; jump if no tape needed
-	ADD	#055205, R2		; calculate attr pos of green tape piece
-	MOV	#000014, R0		; attr
-	CALL	L13224			; calc screen attr address and set attrs for 8x8 block
+
+	; tapes needed green screen attr 
+	; (we aren't using screen attributes in the info panel)
+	br	12504
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+;	MOV	L9Ptr, R3		; get LVPTR
+;	CLR	R2
+;	BISB	000001(R3), R2		; get NTPND byte - tapes needed
+;	br	K12504			; BEQ	K12504			; jump if no tape needed
+;	ADD	#055205, R2		; calculate attr pos of green tape piece
+;	MOV	#000014, R0		; attr
+;	CALL	L13224			; calc screen attr address and set attrs for 8x8 block
 
 ; NLPTM:
 K12504:	MOV	#<K12423+5>, R3		; MONEY+5
@@ -1004,7 +1022,7 @@ K13230:	MOVB	R0, 070340		; set DRFNQ
 	CALL	ClearBuffNina		; BUFCL Fill Ninja tile screen
 	CALL	ClearBuffGuards		; BUFC2 Fill Enemy 0/1 tile screens
 	; clear background buffer
-	MOV	#L25424, R3		; BUFFB Back tile screen address
+	MOV	#BuffB, R3		; BUFFB Back tile screen address
 	MOV	#000440, R1		; 288. words
 10$:	CLR	(R3)+			; <
 	SOB	R1, 10$			; repeat
@@ -1013,7 +1031,7 @@ K13230:	MOVB	R0, 070340		; set DRFNQ
 	MOV	#177777, R5		; filler
 K13274:	MOV	R5, (R3)+		; <
 	SOB	R1, K13274		; repeat
-	MOV	#L24324, R3		; BUFFD
+	MOV	#BuffD, R3		; BUFFD
 	MOV	#000440, R1		; 288. words
 	MOV	#000401, R5		; filler
 10$:	MOV	R5, (R3)+		; <
@@ -1337,7 +1355,7 @@ K15500:	MOVB	K36214, K01602		; RMDN room level
 	MOVB	R0, <K15550+7>		; put digit in " LEVEL X " string
 	MOV	#000011, R1
 	MOV	#K15550, R2		; " LEVEL X "
-	MOV	#127105, R3
+	mov	#BuffO+241., R3	; BUFFO + something
 	CALL	K04604			; BUFOM - Draw string as tiles
 	DEC	(SP)
 	JMP	K13422
@@ -1447,7 +1465,7 @@ K16234:	MOV	(SP), R0
 	MOVB	(R0), K01611		; offset high
 	MOV	R0, (SP)
 	MOV	K01610, R3		; get offset
-	ADD	#043310, R3		; + base address
+	ADD	#CBuffsDiffA, R3		; + base address
 K16260:	PUSH	R2			; <
 	PUSH	R3
 K16264:	MOVB	(R4)+, (R3)+		; | <
@@ -1500,7 +1518,7 @@ K16350:	CLRB	<L14472+2>		; clear (DECEN+1)
 
 ; Room marker $13 023 - Moon 2x2 tiles
 K16400:	MOV	#062245, R3
-	CMPB	#001, @#125555
+	cmpb	#1, BuffB+89.		; is it 'sky' tile on background?
 	BNE	K16466			; => NWUKL
 	MOV	#K16474, R4		; copy from
 	MOVB	#002, K01604		; width = 2
@@ -1508,7 +1526,7 @@ K16400:	MOV	#062245, R3
 
 ; Entry point: Copy tiles; K01604 = width, R1 = height, R4 = address to copy from
 K16432:	MOV	#000040, R2		; 32. = row width
-	ADD	#043310, R3		; + base address
+	ADD	#CBuffsDiffA, R3		; + base address
 	PUSH	R5
 K16444:	MOVB	K01604, R5		; < width  !!MUT-ARG!!
 	PUSH	R3
@@ -1678,7 +1696,7 @@ K17762:	MOV	(SP), R3
 	BISB	(R3), R0		; get tile
 	SWAB	R0
 	BISB	(R3), R0		; get same tile again
-	MOV	#L25424, R3		; BUFFB Back tile screen address
+	MOV	#BuffB, R3		; BUFFB Back tile screen address
 	MOV	#000110, R1		; 72. * 8. = 576.
 K20004:	MOV	R0, (R3)+		; < fill 2 tiles
 	MOV	R0, (R3)+		; | fill 2 tiles
@@ -1694,7 +1712,7 @@ K20022:	POP	R3
 	MOVB	(R3), K01607
 	PUSH	R3
 	MOV	K01606, R3
-	ADD	#043310, R3		; + base address
+	ADD	#CBuffsDiffA, R3		; + base address
 	MOVB	R0, (R3)
 	JMP	K13422
 ; Room marker $0F 017 - TLDTN
@@ -1704,7 +1722,7 @@ K20056:	MOV	#000312, R0		; 202.
 	MOVB	(R3), K01607
 	PUSH	R3
 	MOV	K01606, R3
-	ADD	#043310, R3		; + base address
+	ADD	#CBuffsDiffA, R3		; + base address
 	MOVB	R0, (R3)+
 	INCB	R0
 	MOVB	R0, (R3)
@@ -1736,7 +1754,7 @@ K20156:	POP	R0
 	MOVB	(R0), K01611		; get offset hi
 	PUSH	R0
 	MOV	K01610, R3		; offset
-	ADD	#043310, R3		; + base address
+	ADD	#CBuffsDiffA, R3		; + base address
 	MOVB	K01604, R0		; tile
 K20216:	MOVB	R0, (R3)		; < put tile
 	ADD	R2, R3			; | + offset
@@ -1761,7 +1779,7 @@ K20266:	MOV	#000037, R2		; 31.
 	PUSH	R0
 	MOVB	(R0), K01611		; get offset hi
 	MOV	K01610, R3		; offset
-	ADD	#043310, R3		; + base address
+	ADD	#CBuffsDiffA, R3		; + base address
 	MOVB	K01604, R0		; get tile
 K20326:	MOVB	R0, (R3)+		; < put tile
 	INCB	R0			; | next tile
@@ -1771,7 +1789,7 @@ K20326:	MOVB	R0, (R3)+		; < put tile
 	SOB	R1, K20326		; repeat
 	JMP	K13422
 ; Room marker $09 011 - ROCKS - Supertile, 8x6 tiles
-K20346:	MOV	#L25424, R2		; BUFFB Back tile screen address
+K20346:	MOV	#BuffB, R2		; BUFFB Back tile screen address
 	MOV	#000003, R1
 10$:	MOV	#004, (PC)+
 12$:	.word	4
@@ -1834,7 +1852,7 @@ K24010:	MOV	R3, <K24062+2>		; set (DIBLD+1)
 	PUSH	R0
 	MOVB	(R0), K01611
 	MOV	K01610, R3
-	ADD	#043310, R3		; + base address
+	ADD	#CBuffsDiffA, R3		; + base address
 K24050:	PUSH	R2			; <
 	PUSH	R3
 K24054:	MOVB	R5, (R3)+
@@ -1858,7 +1876,7 @@ K24104:	POP	R0			;
 	PUSH	R0
 	MOVB	(R0), K01611		; get offset high
 	MOV	K01610, R3		; offset
-	ADD	#043310, R3		; + base address
+	ADD	#CBuffsDiffA, R3		; + base address
 K24142:	PUSH	R2			; <
 	PUSH	R3
 K24146:	MOVB	R5, (R3)+		; | <  put one tile
@@ -1926,8 +1944,8 @@ K24360:	ADD	#000003, R4		; next record
 	BNE	K24436			; no => NWATR
 ; Room level = 31. = lower level with water
 	MOV	#000400, R1		; 256.
-	MOV	#126463, R3		; BUFFB+543.
-	MOV	#127563, R2		; BUFFO+543.
+	mov	#BuffB+543., R3
+	mov	#BuffO+543., R2
 ; WATER:
 K24420:	CMPB	(R3), #000307		; 199.
 	BHIS	K24430			; => NTWCR
@@ -1947,7 +1965,7 @@ K24446:	CMPB	K36214, (R4)		; <  == RMDN room level
 	MOVB	000002(R4), K01610
 	MOVB	000003(R4), K01611
 	MOV	K01610, R3
-	ADD	#043310, R3		; + base address
+	ADD	#CBuffsDiffA, R3		; + base address
 	MOVB	(R3), R0
 	INCB	R0
 	BNE	K24530			; => YOGRT
@@ -1964,34 +1982,83 @@ K24530:	SUB	#001100, R3		; <BUFFB-BUFFO>
 K24556:	ADD	#000016, R4		; + 14. to next record
 	SOB	R1, K24446		; repeat => NROBL
 	CALL	DrawScreen		; DOPIC - Show the room on the screen
-	MOVB	K17635, R0		; get LETNO
-	DECB	R0
-	BNE	K24620			; => LETP2
-	MOV	#K24616, R3
-	MOV	#050063, R2		; screen coords
-	MOV	#000001, R1		; 1.
-	BR	K24646			; => KOON3
+
+; rocket text printing on screen 'colonel briggsy..' whatsoever
+; removed by me, looks awfull
+
+	br	K24764
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	
+; 2	MOVB	K17635, R0		; get LETNO
+; 1	DECB	R0
+; 1	BNE	K24620			; => LETP2
+; 2	MOV	#K24616, R3
+; 2	MOV	#050063, R2		; screen coords
+; 2	MOV	#000001, R1		; 1.
+; 1	BR	K24646			; => KOON3
 ;
-K24616:	.WORD	177777	;???
+;
+;K24616:	.WORD	177777	;???
 ; LETP2:
-K24620:	DECB	R0
-	BNE	K24662
-	MOV	#000040, <K02006+2>	; 32. - vertical text
-	MOV	#K17666, R3		; "OLONEL BRIGGSY  EXPLORER"
-	MOV	#040023, R2
-	MOV	#000022, R1		; 18.
+;K24620:	DECB	R0
+;	BNE	K24662
+;	MOV	#000040, <K02006+2>	; 32. - vertical text
+;	MOV	#K17666, R3		; "OLONEL BRIGGSY  EXPLORER"
+;	MOV	#040023, R2
+;	MOV	#000022, R1		; 18.
 ; KOON3:
-K24646:	CALL	K01704			; PRINT string
-	MOV	#000001, <K02006+2>	; 1. - horizontal text
-	BR	K24764			; => NXMAN
+;K24646:	CALL	K01704			; PRINT string
+;	MOV	#000001, <K02006+2>	; 1. - horizontal text
+;	BR	K24764			; => NXMAN
 ; LETP3:
-K24662:	DECB	R0
-	BNE	K24764			; => NXMAN
-	MOV	#000040, <K02006+2>	; 32. - vertical text
-	MOV	#K17710, R3		; "PLORER"
-	MOV	#040023, R2		; screen coords
-	MOV	#000006, R1		; 6.
-	BR	K24646			; => KOON3
+;K24662:	DECB	R0
+;	BNE	K24764			; => NXMAN
+;	MOV	#000040, <K02006+2>	; 32. - vertical text
+;	MOV	#K17710, R3		; "PLORER"
+;	MOV	#040023, R2		; screen coords
+;	MOV	#000006, R1		; 6.
+;	BR	K24646			; => KOON3
+
+
 ; PLATR procedure
 K24712:	MOV	K24746, R3		; PLAPS
 	MOV	#000004, R1		; 4.
@@ -2012,13 +2079,13 @@ K24762:	.BYTE	000, 000		; DEFGH
 ;
 ; NXMAN:
 K24764:	CALL	ClearBuffNina		; BUFCL Fill Ninja tile screen
-	MOV	#L24324, R3		; BUFFD
+	MOV	#BuffD, R3		; BUFFD
 	MOV	#000220, R1
 10$:	CLR	(R3)+			; <
 	CLR	(R3)+			; |
 	SOB	R1, 10$			; repeat
 K25006:	MOV	#000001, R1
-K25012:	MOV	#L30724, R3		;WARN Enemy 0 tile screen address
+K25012:	MOV	#BuffG1, R3		;WARN Enemy 0 tile screen address
 	SUB	#004400, R3
 	MOV	#000001, R0
 K25026:	MOVB	R0, (R3)		; <
@@ -2031,14 +2098,14 @@ K25030:	INC	R3			; | !!MUT-CMD!!
 ; Room 58. = $3A - lift shaft top
 	MOV	#000006, R1		; 6.
 	MOV	#K26660, R2		; " LIFT "
-	MOV	#126665, R3
+	mov	#BuffO+97., R3
 	CALL	K04604			; BUFOM - Draw string as tiles
 K25072:	CMPB	(R3), #074		; room type == $3C ? lift bottom
 	BNE	K25120
 ; Room 60. = $3C - lift shaft bottom
 	MOV	#000006, R1		; 6.
 	MOV	#K26660, R2		; " LIFT "
-	MOV	#126700, R3
+	mov	#BuffO+108., R3
 	CALL	K04604			; BUFOM - Draw string as tiles
 K25120:	CMPB	(R3), #000236		; room == 158. ?
 	BNE	K25216
@@ -2086,7 +2153,7 @@ K25276:	CALL	K36266			; MANDR
 	CMPB	R0, #000010		; == 8. ?
 	BLO	K25362			; => NDRON
 	MOV	K36212, R3		; get MANPS
-	MOV	#126566, R2		; BUFFO+34.
+	mov	#BuffO+34., R2
 	CALL	K55630			; LFEDQ
 	ADD	R2, R3
 	MOV	#000002, R1
@@ -2321,16 +2388,16 @@ K26674:	.WORD	000000
 K26676:	.WORD	000000
 ; BATPM
 K26700:	.WORD	000012, 004012, 000012, 000010, 004010, 000011, 004011, 000011
-;
+
 ; GDRNP:
-K26720:	MOV	#127771, R3		; BUFFN+101
+K26720:	mov	#BuffN+101., R3
 	TSTB	R0
 	BEQ	K26734
-	MOV	#127764, R3
+	mov	#BuffN+96., R3
 K26734:	MOVB	000003(R4), K01606
 	MOVB	000004(R4), K01607
 	ADD	K01606, R3
-	MOVB	050137, R0										; (!!!)
+	MOVB	050137, R0
 	INCB	R0
 	BEQ	K27026			; => NGDPP
 	MOVB	(R3), R0
@@ -2344,13 +2411,13 @@ K26734:	MOVB	000003(R4), K01606
 	BLO	K27026
 	JMP	K27460			; => NGDKP
 ; NGDPP:
-K27026:	MOVB	050131, R0		; get (MANBF+17.)						(!!!)
+K27026:	MOVB	050131, R0		; get (MANBF+17.)
 	INCB	R0
 	BEQ	K27106
-	MOV	#127731, R3
+	mov	#BuffN+69., R3		; BUFFN+something
 	TSTB	R1
 	BEQ	K27052
-	MOV	#127724, R3
+	mov	#BuffN+64., R3		; BUFFN+something
 K27052:	ADD	K01606, R3
 	MOVB	(R3), R0
 	INCB	R0
@@ -2424,10 +2491,10 @@ K27454:	CALL	K27566			; TURNQ
 K27460:	MOV	K77516, R3
 	JMP	K30450			; => ENDGP
 ;
-K27470:	MOV	#127672, R3
+K27470:	mov	#BuffN+38., R3		; BUFFN+something
 	TSTB	R1
 	BEQ	K27504
-	MOV	#127665, R3
+	mov	#BuffN+33., R3		; BUFFN+something
 K27504:	MOVB	050127, R0
 	INCB	R0
 	BEQ	K27552
@@ -2493,23 +2560,33 @@ K27754:	.BYTE	243, 244
 	.BYTE	244, 244
 	.BYTE	244, 244
 	.BYTE	244, 245
-;
+
 ; RND procedure
-K27766:	PUSH	R3
-K27770:	MOV	#000000, R3		; SEED
-	INC	R3
-	BIC	#040000, R3
-	MOV	R3, <K27770+2>
-	MOVB	(R3), R0
-	POP	R3
-	RETURN
+K27766:	jmp	Random
+;	PUSH	R3
+;K27770:	MOV	#000000, R3		; SEED
+;	INC	R3
+;	BIC	#040000, R3
+;	MOV	R3, <K27770+2>
+;	MOVB	(R3), R0
+;	POP	R3
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+
 ; GDFFP:
-K30014:	MOV	#131072, R2		; BUFG1+102.
+K30014:	mov	#BuffG1+102., R2	; BUFG1+102.
 	MOV	#105205, R5		; command ??
 	MOV	#005203, R0		; command ??
 	CMPB	K36264, #001		; DIR == 1 ?
 	BNE	K30054
-	MOV	#131063, R2		; BUFG1+95.
+	mov	#BuffG1+95., R2		; BUFG1+95.
 	MOV	#105305, R5		; command ??
 	MOV	#005303, R0		; command ??
 K30054:	MOV	R0, K30170		; set FLDID command
@@ -2605,10 +2682,10 @@ K30470:	MOVB	K36264, (R3)		; copy DIR
 	MOVB	000003(R4), K01610
 	MOVB	000004(R4), K01611
 	MOV	K01610, R3
-	MOV	#L30724, R2		; Enemy 0 tile screen address
+	MOV	#BuffG1, R2		; Enemy 0 tile screen address
 	TSTB	000011(R4)
 	BPL	K30532
-	MOV	#L32024, R2		; Enemy 1 tile screen address
+	MOV	#BuffG2, R2		; Enemy 1 tile screen address
 K30532:	ADD	R2, R3
 K30534:	MOV	#000000, R2
 K30540:	MOV	#000007, R1
@@ -2686,15 +2763,16 @@ K30756:	MOV	#K36212, R3		; MANPS address
 	JMP	K25454			; => NXGRD
 K31116:	CLRB	K26672			; clear GDHIT
 
+; treasure chest flashing attrs
+;
 ;	CMP	#000240, K04114		; NOP command
 ;	BEQ	K31212
-	br	10$
+	br	K31212
 	nop
 	nop
 	nop
 	nop
-; treasure chest flashing attrs
-;	MOVB	042150, R0									; (!!!)
+;	MOVB	042150, R0
 ; NXINC:
 ;K31136:	INCB	R0
 ;	CMPB	R0, #000026		; 22.
@@ -2702,9 +2780,9 @@ K31116:	CLRB	K26672			; clear GDHIT
 ;	CMPB	R0, #000030		; 24.
 ;	BNE	K31160
 ;	MOV	#000023, R0
-;K31160:	MOVB	R0, 042150									; (!!!)
-;	MOVB	R0, 042171									; (!!!)
-;	MOVB	R0, 042212									; (!!!)
+;K31160:	MOVB	R0, 042150
+;	MOVB	R0, 042171
+;	MOVB	R0, 042212
 	nop
 	nop
 	nop
@@ -2721,19 +2799,25 @@ K31116:	CLRB	K26672			; clear GDHIT
 	nop
 	nop
 	nop
-10$:
+;	MOVB	#001, R0
+;	MOV	#BuffD+404., R3
+;	MOVB	R0, (R3)+
+;	MOVB	R0, (R3)+
+;	MOVB	R0, (R3)
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
 
-	MOVB	#001, R0
-	MOV	#125150, R3									; (!!!)
-	MOVB	R0, (R3)+
-	MOVB	R0, (R3)+
-	MOVB	R0, (R3)
 K31212:	MOV	<K13332+2>, R3		; get (RM+1)
 	MOVB	(R3), R0		; get room type
 K31220:	CMPB	R0, #356		;WARN
 	BNE	K31324
-	MOV	#125633, R3									; (!!!)
-	MOV	#124533, R2									; (!!!)
+	mov	#BuffB+135., R3
+	mov	#BuffD+135., R2
 	MOVB	#000012, R1		; 10.
 ; FNLP1:
 K31242:	CALL	Random			; Get random number
@@ -2844,7 +2928,7 @@ K31722:	MOVB	R0, K32300		; set MSLNO
 K31736:	MOVB	000003(R4), K01610
 	MOVB	000004(R4), K01611
 	MOV	K01610, R3
-	ADD	#L24324, R3		; BUFFD
+	ADD	#BuffD, R3		; BUFFD
 	MOVB	#001, (R3)
 	MOVB	000005(R4), R5
 	PUSH	R1
@@ -2865,7 +2949,7 @@ K32036:	BIT	#000010, R5		; bit 3 ?
 K32050:	MOVB	000003(R4), K01610
 	MOVB	000004(R4), K01611
 	MOV	K01610, R3		; R3 = object offset
-	ADD	#L25424, R3		; BUFFB Back tile screen address
+	ADD	#BuffB, R3		; BUFFB Back tile screen address
 	CMPB	(R3), #000307
 	BLO	K32112
 ; NOEL3:
@@ -2932,7 +3016,7 @@ K32364:	POP	R1
 	MOVB	000003(R4), K01610
 	MOVB	000004(R4), K01611
 	MOV	K01610, R3
-	ADD	#L27624, R3		; BUFFN Ninja tile screen address
+	ADD	#BuffN, R3		; BUFFN Ninja tile screen address
 	MOVB	(R4), (R3)
 	RORB	(R4)
 	BHIS	K32422
@@ -2956,29 +3040,31 @@ K32456:	TSTB	K36214			; check RMDN room level
 	MOV	R2, K40276		; set GLIPS
 	MOVB	#005, K40300		; set GLIDN = 5
 	MOV	#K40301, R2		; GLIDC
-	MOV	#L26524, R1		; BUFFO Front tile screen address
+	MOV	#BuffO, R1		; BUFFO Front tile screen address
 	CALL	K40356			; DRGLI
 	MOV	#K46162, R2		; NINDC
-	MOV	#L24324, R1		; BUFFD
+	MOV	#BuffD, R1		; BUFFD
 	CALL	K40356			; DRGLI
+
+; TV processing
 ; PICRT:
-K32542:	TSTB	K14640									; (!!!)
-	BEQ	K32736
+K32542:	TSTB	K14640			; do we have TV in the room?
+	BEQ	SetTermColor
 	MOV	#K14641, R4		; TVCNT
 	DECB	(R4)
 	BNE	K32612
-	CALL	K27766			; RND
+	CALL	K27766			; RND2
 	MOVB	R0, (R4)
 	BIC	#177774, R0
 	BNE	K32624
-	CALL	K27766			; RND
+	CALL	K27766			; RND2
 	BIC	#177774, R0
 	ADD	#000004, R0
 	BR	K32650
 K32612:	MOVB	000001(R4), R0
 	BIT	#000004, R0		; bit 2 ?
 	BNE	K32650
-K32624:	CALL	K27766			; RND
+K32624:	CALL	K27766			; RND2
 	BIC	#177774, R0
 	CMPB	R0, 000001(R4)
 	BNE	K32650
@@ -2992,38 +3078,38 @@ K32650:	MOVB	R0, 000001(R4)
 	ADD	R1, R0			; *12.
 	MOV	R0, R2
 	ADD	#K14500, R2		; + TVFZ1
-	MOV	#125631, R3									; (!!!)
-	MOV	#124531, R4									; (!!!)
-	MOV	#000003, R5
-K32710:	MOV	#000004, R1		; <
-K32714:	MOVB	(R2)+, (R3)+		; | <
-	MOVB	#001, (R4)+
-	SOB	R1, K32714		; | repeat
-	ADD	#000034, R4
-	ADD	#000034, R3
-	SOB	R5, K32710		; repeat
+	; change TV screen tiles, set buffD to update them
+	mov	#BuffB+133., R3		; TV positions in buffers
+	mov	#BuffD+133., R4
+	mov	#3, R5			; TV height
+10$:	mov	#4, R1			; TV width
+20$:	movb	(R2)+, (R3)+
+	movb	#1, (R4)+
+	sob	R1, 20$
+	add	#34, R4
+	add	#34, R3
+	SOB	R5, 10$
+
+; coloring terminals
+SetTermColor:
+	MOV	K36212, R3		; get MANPS
+	add	#BuffO+98., R3
+	movb	#50, R0			; blue+green (cyan) background
+	cmpb	(R3), #212		; is we at terminal
+	bne	10$
+	mov	#30, R0			; blue+red (magenta) background
+10$:	; set color attrs for terminal tiles
+	mov	R0, K46013
+	mov	R0, K46034
+	mov	R0, K46055
+
 ;
-K32736:	MOV	K36212, R3		; get MANPS
-	ADD	#126666, R3									; (!!!)
-	MOVB	#000050, R0
-	CMPB	(R3), #000212
-	BNE	K32764
-	MOV	#000030, R0
-K32764:
-	; set bike (lower 3 tiles) colors (for what???)
-;	mov	R0, K46013
-;	mov	R0, K46034
-;	mov	R0, K46055
-	nop
-	nop
-	nop
-	nop
-	nop
-	nop
-	;
-	CALL	DrawScreen		; DOPIC - Show the room on the screen
+; OK, draw screen then
+;
+DoPic1:	CALL	DrawScreen		; DOPIC - Show the room on the screen
 	TSTB	K36216			; check ELECU
 	BEQ	K33052
+
 
 ; NICK2: Set Ninja to random color, but not blue or green
 K33012:	CALL	Random			; Get random number
@@ -3053,8 +3139,9 @@ K33114:	CMPB	K33540, #002		; DEAD == 2 ?
 ; Update TIMER counter
 K33124:	; а не пошел бы этот таймер знаете-ли
 	; кому таймер нужен - ну запустите его на телефоне
-	nop				; MOV	#K36207, R3		; TIMER counter address
-	nop
+	jmp	K24764
+;	nop				; MOV	#K36207, R3		; TIMER counter address
+;	nop
 	nop				; DECB	(R3)			; decrement
 	nop				; BNE	K33270
 	nop				; MOVB	#000024, (R3)		; reset the counter
@@ -3204,7 +3291,7 @@ K36104:	MOVB	R0, K36264		; set DIR
 K36112:	MOVB	000004(R4), K01611
 	MOVB	000003(R4), K01610
 	MOV	K01610, R3
-	ADD	#L24324, R3		; BUFFD address
+	ADD	#BuffD, R3		; BUFFD address
 	MOV	#K46162, R2		; NINDC address
 K36142:	MOV	#000010, R1		;WARN 8.
 	movb	K36200, K01604									; MOVB	036200, K01604									
@@ -3231,7 +3318,7 @@ K36216:	.BYTE	0			; ELECU ??
 ;
 ; MANAR procedure: ??
 K36220:	MOV	K36212, R3		; get MANPS
-	ADD	#L24324, R3		; + BUFFD
+	ADD	#BuffD, R3		; + BUFFD
 	MOV	#K46162, R2		; get NINDC
 	MOV	#000010, R1		; 8.
 K36240:	MOVB	#006, K01604		; 6.
@@ -3243,7 +3330,7 @@ K36264:	.WORD	0			; DIR - mirroring flag
 ;
 ; MANDR procedure: ??
 K36266:	MOV	K36212, R3		; get MANPS
-	ADD	#L27624, R3		; + BUFFN: Ninja tile screen address
+	ADD	#BuffN, R3		; + BUFFN: Ninja tile screen address
 K36276:	MOV	#000000, R2		;!!MUT-ARG!!
 	MOV	#000007, R1		; 7.
 	BR	K36240
@@ -3323,12 +3410,12 @@ K36576:	MOV	#K36612, R3		; FKIKP -> (VECTN+1)
 K36612:	MOVB	050116, R0									; (!!!)
 	INCB	R0
 	BEQ	K36646
-	MOV	#130764, R2
+	mov	#BuffG1+32., R2
 	MOVB	K36264, R0		; get DIR
 	DECB	R0
-	BNE	K36642
-	MOV	#130771, R2
-K36642:	CALL	K51646			; HITGQ
+	BNE	10$
+	mov	#BuffG1+37., R2
+10$:	CALL	K51646			; HITGQ
 ; JMP2P:
 K36646:	CALL	K36344			; EDGES
 	CALL	K37270			; HITJJ
@@ -3541,11 +3628,11 @@ K40044:	CALL	K36344			; EDGES
 	JMP	K25276			; => ENDVC
 K40112:	MOV	#000021, R1		; 17.
 	MOV	#K40164, R2		; " EXCELLENT VALUE "
-	MOV	#127133, R3		; address
+	mov	#BuffO+263., R3
 	CALL	K04604			; BUFOM - Draw string as tiles
 	MOV	#000022, R1		; 18.
 	MOV	#K40205, R2		; " YOU HAVE ESCAPED "
-	MOV	#127273, R3		; address
+	mov	#BuffO+359., R3
 	CALL	K04604			; BUFOM - Draw string as tiles
 	MOVB	#310, K17200		; set BIKER
 	JMP	K55262			; => SETST - end of game
@@ -3626,16 +3713,16 @@ K40626:	SEC
 	ROLB	K40574
 	BNE	K40576
 	MOV	#K17273, R2		; ??? 11x5 tiles
-	MOV	#L26524, R1		; BUFFO Front tile screen address
+	MOV	#BuffO, R1		; BUFFO Front tile screen address
 	CALL	K40436			; DRBIK
 	MOV	#046162, R2
-	MOV	#L24324, R1		; BUFFD
+	MOV	#BuffD, R1		; BUFFD
 	CALL	K40436			; DRBIK
 	DECB	037662
 	BEQ	K40700
 	JMP	K25276
 K40700:	MOV	#K17204, R2		; BIKEC 11x5 tiles
-	MOV	#L26524, R1		; BUFFO Front tile screen address
+	MOV	#BuffO, R1		; BUFFO Front tile screen address
 	CALL	K40436			; DRBIK
 	MOVB	#020, K17200		; set BIKER = 16.
 	JMP	K55262			; => SETST game nearly completed
@@ -3652,6 +3739,14 @@ K40742:	DECB	K36214			; decr RMDN room level
 	ADD	#001100, R3		; + 576.
 	MOV	#177740, R2		; up one level
 	JMP	K54262			; => PIGGS
+
+
+
+	; (!!!) WARNING
+	.if NE 41000-.
+	.error Addresses (41000) not in place
+	.endc
+
 
 ; LEGS procedure
 K41000:	MOVB	046775, K01602		; room number
@@ -3699,7 +3794,7 @@ K41150:	mov	#000000, R3		;!!MUT-ARG!! (!!!) must be even addr
 	sob	R1, 10$			; repeat
 	mov	(R3)+, (R2)+
 	return
-;
+
 K41172:	.byte	0			; LEGS
 	.byte	0			; was FFCOL (K41173)
 	.byte	0			; was FFCOL+1
@@ -3733,7 +3828,7 @@ K47704:	PUSH	R4
 	MOV	R1, R5
 	MOV	#K50110, R1		; MANBF addr
 	MOV	@#K36212, R4		; get MANPS
-	ADD	#L25424, R4		; BUFFB Back tile screen address
+	ADD	#BuffB, R4		; BUFFB Back tile screen address
 	MOVB	K01604, K50062
 ; LOOP6:
 K47734:	MOVB	K50062, K01604
@@ -3779,7 +3874,7 @@ K50110:	.BLKW	30			; MANBF
 K50170:	CALL	K50274			; FLORQ
 	BNE	K50336
 	MOV	K36212, R3		; get MANPS
-	MOV	#126566, R2
+	mov	#BuffO+34., R2
 	CALL	K55630			; LFEDQ
 	ADD	R2, R3
 	MOV	#000002, R1
@@ -3790,7 +3885,7 @@ K50230:	INCB	K36211
 	MOV	K36212, R3		; get MANPS
 	ADD	#000040, R3
 	MOV	R3, K36212		; set MANPS
-	MOV	#126566, R2
+	mov	#BuffO+34., R2
 	CALL	K55630			; LFEDQ
 	ADD	R2, R3
 	TSTB	(R3)
@@ -3812,10 +3907,11 @@ K50310:	MOVB	(R3), R0
 K50332:	INCB	R5
 	RETURN
 ;
-K50336:	MOV	#126566, R2
+K50336:
+	mov	#BuffO+34., R2
 	CMPB	K36211, #000377
 	BPL	K50356
-	MOV	#127026, R2
+	mov	#BuffO+194., R2
 K50356:	CALL	K55630			; LFEDQ
 	MOV	K36212, R3		; get MANPS
 	ADD	R2, R3
@@ -3863,7 +3959,7 @@ K50536:	BIT	#000001, R0		; bit 0 ?
 	JMP	K55246			; => SETVC - set vectors
 ; SWIMQ:
 K50572:	MOV	K36212, R3		; get MANPS
-	MOV	#126726, R2
+	mov	#BuffO+130., R2
 	CALL	K55630			; LFEDQ
 	ADD	R2, R3
 	TSTB	(R3)
@@ -3877,22 +3973,22 @@ K50624:	TSTB	K37662			; check SPEED
 	BEQ	K50722
 	MOVB	050154, R0		; get (MANBF+36)
 	INCB	R0
-	BEQ	K50666
-	MOV	#131224, R2
+	BEQ	20$
+	mov	#BuffG1+192., R2
 	MOVB	K36264, R0		; get DIR
 	DECB	R0
-	BNE	K50662
-	MOV	#131231, R2
-K50662:	CALL	K51646			; HITGQ
-K50666:	MOVB	050140, R0
+	BNE	10$
+	mov	#BuffG1+197., R2
+10$:	CALL	K51646			; HITGQ
+20$:	MOVB	050140, R0
 	INCB	R0
 	BEQ	K50722
-	MOV	#131124, R2
+	mov	#BuffG1+128., R2
 	MOVB	K36264, R0		; get DIR
 	DECB	R0
-	BNE	K50716
-	MOV	#131131, R2
-K50716:	CALL	K51646			; HITGQ
+	BNE	30$
+	mov	#BuffG1+133., R2
+30$:	CALL	K51646			; HITGQ
 K50722:	CLRB	037662
 	call	GetKey
 	BIT	#000020, R0		; bit 4 fire ?
@@ -4026,12 +4122,12 @@ K51556:	INCB	(R3)
 	BR	K51630
 K51566:	TSTB	037662
 	BEQ	K51620
-	MOV	#130764, R2
+	mov	#BuffG1+32., R2
 	MOVB	K36264, R0		; get DIR
 	DECB	R0
-	BNE	K51614
-	MOV	#130771, R2
-K51614:	CALL	K51646			; HITGQ
+	BNE	10$
+	mov	#BuffG1+37., R2
+10$:	CALL	K51646			; HITGQ
 K51620:	CLRB	037662
 	call	GetKey
 K51630:	BIT	#000020, R0		; bit 4 fire ?
@@ -4069,12 +4165,12 @@ K51744:	MOV	#037662, R3
 K51770:	MOVB	050117, R0
 	INCB	R0
 	BEQ	K52024
-	MOV	#130765, R2
+	mov	#BuffG1+33., R2
 	MOVB	K36264, R0		; get DIR
 	DECB	R0
-	BNE	K52020
-	MOV	#130770, R2
-K52020:	CALL	K51646			; HITGQ
+	BNE	10$
+	mov	#BuffG1+36., R2
+10$:	CALL	K51646			; HITGQ
 K52024:	JMP	K25276
 ; KIK2P: ??? - Vector for (VECTN+1)
 K52030:	JMP	K55262			; => SETST
@@ -4114,7 +4210,7 @@ K52172:	BNE	K52200
 	JMP	K53066
 K52200:	CMPB	R0, #310		; == 200. ?
 	BNE	K52212
-	JMP	L14674			; yes => COMPL
+	JMP	Completed		; yes => COMPL
 K52212:	call	GetKey
 	BIT	#000020, R0		; bit 4 fire ?
 	BNE	K52230
@@ -4125,7 +4221,7 @@ K52230:	MOVB	050134, R0		; get (MANBF+20.)
 	BNE	K52244
 	JMP	K52772			; => NCONU
 K52244:	MOV	K36212, R3		; get MANPS
-	ADD	#126666, R3		; + <BUFFO+98.>
+	add	#BuffO+98., R3
 	CMPB	(R3), #000212		; == 138. ?
 	BEQ	K52266
 	JMP	K52772			; no => NCONU
@@ -4251,7 +4347,7 @@ K53106:	BIT	#000004, R0		; bit 2 ? down
 ; FEGJB:
 K53132:	CMPB	R0, #000324		; == 212. ?
 	BNE	K53166			; no => NLFTD
-	MOVB	126471, R0
+	movb	BuffB+549., R0
 	CMPB	R0, #010		; == 10. ?
 	BNE	K53166
 	CALL	L10300			; MONYP - Print MONEY
@@ -4301,7 +4397,7 @@ K53352:	BIT	#000010, R0		; bit 3 ? kick
 	TSTB	K36264			; check DIR
 	BNE	K53440			; => NPOSR
 	MOV	K36212, R3		; get MANPS
-	ADD	#126624, R3		; + <BUFFO+64.>
+	add	#BuffO+64., R3
 	CMPB	(R3), #000142		; == 98. ?
 	BNE	K53440			; no => NPOSR
 	MOVB	#376, K17200		; set BIKER = 254.
@@ -4317,7 +4413,7 @@ K53440:	MOVB	050162, R0		; get (MANBF+42.)
 	MOVB	050167, R0		; get (MANBF+47.)
 K53456:	CMPB	R0, #000324		; == 212. ?
 	BNE	K53512			; no => NLFTU
-	MOVB	126471, R0		; get (BUFFB+549.)
+	movb	BuffB+549., R0		; get (BUFFB+549.)
 	CMPB	R0, #000010		; == 8. ?
 	BEQ	K53512			; yes => NLFTU
 	CALL	L10300			; MONYP - Print MONEY
@@ -4402,7 +4498,7 @@ K54032:	BIT	#000010, R0		; bit 3 ?
 	DECB	R0
 	BMI	K54076			; => LCLUY
 	MOV	K36212, R3		; get MANPS
-	ADD	#125366, R3		; + <BUFFB-30.>
+	add	#BuffB-30., R3		; + <BUFFB-30.>
 	MOVB	(R3), R0
 	CMPB	R0, #000314		; == 204. ?
 	BEQ	K54076			; yes => LCLUY
@@ -4466,21 +4562,21 @@ K54302:	CALL	K54212			; OFBOT
 	BNE	K54346			; => TIMMY
 	MOV	#K54464, R2		; "  MISSION FAILURE  "
 ; TIMMY:
-K54346:	MOV	#127132, R3		; BUFFO+262. address
+K54346:	mov	#BuffO+262., R3
 	CALL	K04604			; BUFOM - Draw string as tiles
 	MOVB	K17200, R0		; get BIKER
 	CMPB	R0, #000375		; == 253. ?
 	BNE	10$			; no => ALRTD
 	MOV	#K17204, R2		; BIKEC
-	MOV	#L26524, R1		; BUFFO Front tile screen address
+	MOV	#BuffO, R1		; BUFFO Front tile screen address
 	CALL	K40436			; DRBIK
 ; ALRTD:
 10$:	MOV	#K46162, R2		; NINDC address
-	MOV	#L24324, R1		; BUFFD address
+	MOV	#BuffD, R1		; BUFFD address
 	CALL	K40436			; DRBIK
 	MOV	#047534, R2		; DEDNC dead Ninja tiles -> (CHARN+1)
 	MOV	#K55224, R3		; DIING -> (VECTN+1)
-	MOVB	#200, R0		; -> SPEED
+	MOVB	#40, R0			; -> SPEED
 	JMP	K55242			; => SETSP - set SPEED and vectors
 ;
 K54440:	.ASCII	/@MISSION@TERMINATED@/
@@ -4509,7 +4605,7 @@ K54562:	MOVB	#021, 060610		; set LFT1 = 17.
 	MOV	K36212, R3		; get MANPS
 	ADD	#000040, R3		; + 32.
 	MOV	R3, K36212		; set MANPS
-	ADD	#125724, R3
+	add	#BuffB+192., R3
 	MOV	#000006, R1
 K54634:	MOVB	#000010, (R3)+
 	SOB	R1, K54634		; repeat
@@ -4534,7 +4630,7 @@ K54732:	MOVB	#177777, R0
 	MOVB	R0, 060610		; set LFT1 = 255.
 	MOVB	R0, K60677		; set LFT3 = 255. DOWN
 	MOV	K36212, R3		; get MANPS
-	ADD	#126024, R3
+	add	#BuffB+256., R3
 	CMPB	(R3), #000372
 	BEQ	K54770
 	JMP	K25276			; => ENDVC
@@ -4551,7 +4647,7 @@ K54774:	MOV	#177777, R0
 	MOV	R3, K36212		; set MANPS
 	CMPB	K36211, #000013
 	BEQ	K55134
-	ADD	#125764, R3
+	add	#BuffB+224., R3
 	MOV	#000006, R1
 	MOV	#070602, R2
 K55064:	MOVB	(R2)+, (R3)+		; <
@@ -4569,12 +4665,12 @@ K55126:	MOVB	#001, -(R3)		; <
 ; JHGY2:
 K55134:	call	GetKey
 	MOV	#K54562, R3		; LIFTD address
-	BIT	#000004, R0		; bit 2 ?
-	BNE	K55252			; no => SETV2 - set vector
+	BIT	#000004, R0		; bit 2 ? (down pressed)
+	BNE	K55252			; yes => SETV2 - set vector
 	MOVB	#000021, 060610		; set LFT1 = 17.
 	CLRB	K60677			; set LFT3 = 0 UP
 	MOV	K36212, R3		; get MANPS
-	ADD	#125723, R3
+	add	#BuffB+191., R3
 	CMPB	(R3), #000010
 	BEQ	K55206
 	JMP	K25276			; => ENDVC
@@ -4586,7 +4682,7 @@ K55206:	DECB	K36211			; decrement MAND
 K55224:	DECB	K37662			; decr SPEED
 	BEQ	K55236
 	JMP	K25276			; => ENDVC
-K55236:	JMP	L10606			; => FNISH - Finish the game
+K55236:	jmp	Finished
 
 ; SETSP: Set SPEED and vectors
 K55242:	MOVB	R0, K37662		; set SPEED
@@ -4607,7 +4703,7 @@ K55302:	PUSH	R4
 ; PUM06:
 K55310:	MOV	#050115, R1		;WARN
 	MOV	@#K36212, R4		; get MANPS
-	ADD	#L25424, R4		; BUFFB Back tile screen address
+	ADD	#BuffB, R4		; BUFFB Back tile screen address
 	MOVB	K01604, 055464
 	ADD	#000005, R2
 ; LROP6:
@@ -4649,7 +4745,7 @@ K55466:	MOVB	K36210, R0		; get MANA
 K55504:	CMPB	R0, #000032		; == 26. ?
 	BHIS	K55534			; => NCHK1
 	MOV	K36212, R3		; get MANPS
-	ADD	#125732, R3
+	add	#BuffB+198., R3
 	CMPB	(R3), #000307
 	BHIS	K55546			; => BLOW1
 	MOVB	K36210, R0		; get MANA
@@ -4663,7 +4759,7 @@ K55546:	CALL	K55736			; LEGSW
 	BIT	#000001, R0		; bit 0 right ?
 K55562:	BNE	K55570
 	JMP	K50744			; => SETCR
-K55570:	MOV	#126666, R2		; BUFFO+98.
+K55570:	mov	#BuffO+98., R2		; BUFFO+98.
 	CALL	K55630			; LFEDQ
 	MOV	K36212, R3		; get MANPS
 	ADD	R2, R3
@@ -4691,7 +4787,7 @@ K55662:	CMPB	R0, #000001
 K55672:	.WORD	016703	;??
 ;
 K55674:	SUB	R3, (R4)
-	ADD	#125723, R3
+	add	#BuffB+191., R3
 	CMPB	(R3), #000307
 	BHIS	K55720
 K55710:	DECB	K36210			; decrement MANA
@@ -4718,8 +4814,8 @@ K60677 = K60640 + 37			; LFT3 lift position byte: 377 = DOWN, 0 = UP
 @include S2SPRT.MAC
 
 
-	.blkb	768.
-	.blkw	114.
+; ///////////////////////////////////////////////////////////////////////////////////////
+; // out of sync by address from here
 
 
 ; GTBAK procedure
@@ -4733,12 +4829,10 @@ L10224:	MOV	R0, K47776		; set command
 	MOV	R0, K55374		; set command
 	RETURN
 
-
 ; GTBK2 Procedure
 L10236:	MOV	#000240, R0		; NOP command
 	BR	L10224
 
-;
 ; MONUP procedure: MONEY up by R1
 L10244:	MOV	#<K12423+12>, R3	; < address
 	MOV	#000006, R5		; 6.
@@ -4750,447 +4844,18 @@ L10260:	INCB	(R3)			; <
 	DEC	R3
 	SOB	R5, L10260		; repeat
 L10276:	SOB	R1, L10244		; repeat
+
 ; MONYP entry point: Print MONEY
 L10300:	MOV	#050146, R2
 	MOV	#000016, R1		; 14.
 	MOV	#K12422, R3		; " PAY $0000000 "
 	JMP	K01704			; PRINT string and return
-;
-; CLSLF procedure: Clear Menu left part
-L10320:	PUSH	R4
-	MOV	#000030, R4		; 24. lines
-	MOV	#040000, R2		; screen coords
-L10332:	PUSH	R2			; <
-	MOV	#000025, R1		; |  21.
-	MOV	#L10560, R3		; |  SPCHR 21. space char string
-	CALL	K01704			; |  Print string
-	POP	R2			; |
-	ADD	#000040, R2		; | +32.
-	BIT	#000340, R2		; |
-	BNE	L10374			; |
-	SUB	#000400, R2		; |
-	ADD	#004000, R2		; |
-L10374:	SOB	R4, L10332		; repeat; Clear atributes
-;NOTE удалил, не нужно на БК
-L10554:	POP	R4
-	RETURN
 
-	.blkw	28.
-	.BLKW	33	;NOTE: Свободное место
 
+; space chars for strings on screen
 L10560:	.ASCIZ	/                     /	; SPCHR 21. space char
 
 
-; FNISH: Finish the game
-; King is dead, Hail to the King
-L10606:			
-	; CALL	L07634			; INITHI Draw Ninja for Menu
-	jmp	Start
-
-	MOVB	#000017, R1		; 15.
-	MOV	#114017, R3		; TABLE
-L10622:	MOV	#<K12423+5>, R2		; MONEY+5
-	PUSH	R3
-	MOVB	#006, K01604		; 6.
-L10636:	CMPB	(R2), (R3)
-	BNE	L10670
-	INC	R3
-	INC	R2
-	DECB	K01604
-	BNE	L10636
-L10654:	POP	R3
-	ADD	#000021, R3		; + 17.
-	SOB	R1, L10622		; repeat
-	BR	L11054			; => TABDR
-	NOP1
-L10670:	BLO	L10654
-	POP	R3
-	PUSH	R1
-	MOV	#040103, R2
-	MOV	#L13706, R3		; "CONGRATULATIONS"
-	MOV	#000017, R1		; 15.
-	CALL	K01704			; PRINT string "CONGRATULATIONS"
-	MOV	#040242, R2
-	MOV	#000022, R1		; 18.
-	CALL	K01704			; PRINT string "YOU ARE NOW A TRUE"
-	MOV	#040344, R2
-	MOV	#000016, R1		; 14.
-	CALL	K01704			; PRINT string "NINJA SABOTEUR"
-	MOV	#044143, R2
-	MOV	#000017, R1		; 15.
-	CALL	K01704			; PRINT string "ENTER YOUR NAME"
-	CALL	L12570			; INPUT string
-	POP	R1
-	MOV	#L14437, R3		; "0 "
-	MOV	#L14416, R2		; "SPARE SCORE+NAME "
-L11000:	MOVB	#000021, K01604		; < 17.
-L11006:	MOVB	-(R2), -(R3)
-	DECB	K01604
-	BNE	L11006
-	SOB	R1, L11000		; repeat
-	MOV	#<K12423+5>, R3
-	MOV	#000006, R1		; 6.
-L11030:	MOVB	(R3)+, (R2)+		; <
-	SOB	R1, L11030		; repeat
-	INC	R3
-	INC	R3
-	MOV	#000013, R1		; 11.
-L11044:	MOVB	(R3)+, (R2)+		; <
-	SOB	R1, L11044		; repeat
-;
-; NOYBA: Show the score table
-L11050:	CALL	L10320			; CLSLF Clear Menu left part
-L11054:	MOV	#000013, R1		; 11.
-	MOV	#L14004, R3		; "HIGH SCORES"
-	CALL	PRINSP			; PRINT string
-	.WORD	040143			; screen coords
-	NOP1
-	MOV	#L14017, R3		; score table address
-	MOV	#040301, R2		; screen coords
-	MOV	#000017, R4		; 15.
-L11112:	PUSH	R2			; <
-	MOV	#000006, R1
-	CALL	K01704			; | Print string
-	PUSH	R3
-	MOV	#L14437, R3		; | "0 "
-	MOV	#000002, R1		; 2.
-	ADD	#000006, R2
-	CALL	K01704			; | Print string
-	POP	R3
-	MOV	#000013, R1		; | 11.
-	ADD	#000002, R2
-	CALL	K01704			; | Print string
-	POP	R2
-	ADD	#000040, R2		; 32.
-	BIT	#000340, R2
-	BNE	L11210
-	ADD	#<004000-400>, R2
-L11210:	SOB	R4, L11112		; repeat
-	CALL	L13024			; KPASE Empty keyboard buffer
-; Wait and return to Menu
-	CLR	R1			; waiting delay
-L11220:	CALL	L13036			; < KEYB Read a key
-	BNE	L11224			; have a key => return to Menu
-	NOP2		;TODO: CALL DELAY
-	SOB	R1, L11220		; waiting loop
-; CLAW1: Entering the Menu; Ninja at right drawn already
-L11224:	CALL	L10320			; CLSLF Clear Menu left part
-	MOV	#L13502, R3		; "K  KEYBOARD" etc.
-	MOV	#000013, R1		; 11.
-	CALL	PRINSP			; PRINT string "K  KEYBOARD"
-	.WORD	040203			; screen coords
-	MOV	#000013, R1		; 11.
-	CALL	PRINSP			; PRINT string "J  JOYSTICK"
-	.WORD	040303			; screen coords
-	MOV	#000020, R1		; 16.
-	CALL	PRINSP			; PRINT string "R  REDEFINE KEYS"
-	.WORD	044043			; screen coords
-	MOV	#000012, R1		; 10.
-	CALL	PRINSP			; PRINT string "P  PALETTE"
-	.WORD	044203			; screen coords
-	MOV	#000020, R1		; 16.
-	CALL	PRINSP			; PRINT string "M  ALTER MISSION"
-	.WORD	044303			; screen coords
-	MOV	#000015, R1		; 13.
-	CALL	PRINSP			; PRINT string "S  START GAME"
-	.WORD	050003			; screen coords
-	MOV	#000007, R1		; 7.
-	CALL	PRINSP			; PRINT string "X  EXIT"
-	.WORD	050203			; screen coords
-	CALL	L13024			; KPASE Empty keyboard buffer
-	CALL	L13474			; INICL Show Menu selection
-	MOV	#60000., R1		; menu delay
-
-; DLNX2: Menu waiting loop
-L11360:	PUSH	R1			; <
-	CALL	L13036			; KEYB Read a key
-	MOV	#MENUTB, R5
-10$:	TST	(R5)			; < end of table ?
-	BEQ	L11464			; | yes =>
-	CMP	R0, (R5)+		; |
-	BEQ	L11474			; | found the key =>
-	BR	10$			; repeat
-L11464:	POP	R1
-	SOB	R1, L11360		; decrease timer, => DLNX2
-	JMP	L11050			; Time is out => NOYBA
-L11474:	JMP	@(R5)
-;
-MENUTB:	.WORD	113, L13146		; 'K' - KEYBOARD
-	.WORD	112, L13206		; 'J' - JOYSTICK
-	.WORD	122, L12316		; 'R' - REDEFINE KEYS
-	.WORD	120, MENPAL		; 'P' - PALETTE
-	.WORD	115, L11476		; 'M' - ALTER MISSION
-	.WORD	123, L11456		; 'S' - START GAME
-	.WORD	130, 0			; 'X' - EXIT
-	.WORD	0
-;
-; Start Game selected
-L11456:	POP	R1
-	JMP	Start			; Start the game
-;
-; В меню выбрали 'P' - PALETTE
-MENPAL:	INC	@#0			; Следующая палитра
-	CALL	@#0			; Устанавливаем палитру
-	BR	L11224			; Return to Menu
-;
-; MISSN: Alter Mission selected
-L11476:	CALL	L10320			; CLSLF Clear Menu left part
-	MOV	#040104, R2
-	MOV	#L12225, R3		; "TYPE REQUIRED"
-	MOV	#000015, R1		; 13.
-	CALL	K01704			; PRINT string "TYPE REQUIRED"
-	MOV	#040204, R2
-	MOV	#000014, R1		; 12.
-	CALL	K01704			; PRINT string "MISSION CODE"
-	MOV	#040343, R2
-	MOV	#000016, R1		; 14.
-	CALL	K01704			; PRINT string "OR PRESS ENTER"
-	MOV	#044042, R2
-	MOV	#000021, R1		; 17.
-	CALL	K01704			; PRINT string "FOR FIRST MISSION"
-	CALL	L13024			; KPASE
-	CALL	L12570			; INPUT string
-; Calculate new mission type
-L11576:	MOV	#000011, R5		; 9. codes
-	MOV	#L12062, R3		; CODES address
-; NXCDL:
-L11606:	MOV	#K12440, R2		; NAME address
-	MOV	#000013, R1		; 11. characters
-	PUSH	R3			; save pointer to codes
-L11620:	CMPB	(R2)+, (R3)+		; < check a character
-	BNE	L11712			; | no => NXCDE
-	SOB	R1, L11620		; repeat
-	POP	R3			; get back to the code
-	MOV	R5, MLEVEL		; set MSLEV Mission Level
-	ADD	#000060, R5		; +'0'
-	MOVB	R5, <L11670+10>		; put level number in the string
-	MOV	#L11670, R3		; "MISSION X SELECTED"
-	MOV	#000022, R1		; 18.
-	MOV	#044242, R2		; screen coords
-	CALL	K01704			; PRINT string
-	BR	L11756			; => JACKB
-;
-MLEVEL:	.word	9.
-;
-L11670:	.ASCII	/MISSION X SELECTED/
-;
-; NXCDE: Subcode not found
-L11712:	POP	R3			; pop addr of last level code
-	ADD	#000013, R3		; 11.  go to code for next level
-	SOB	R5, L11606		; go for rest
-; Code not listed
-L11722:	MOV	#L12030, R3		; "MISSION CODE"
-	MOV	#044245, R2
-	MOV	#000014, R1		; 12.
-	CALL	K01704			; PRINT string "MISSION CODE"
-	MOV	#044304, R2
-	MOV	#000016, R1		; 14.
-	CALL	K01704			; PRINT string "NOT RECOGNISED"
-; JACKB:
-L11756:	NOP2				;	MOV	#K07336, R3		; "PRESS ANY KEY TO CONTINUE"
-	MOV	#050244, R2
-	MOV	#000015, R1		; 13.
-	CALL	K01704			; PRINT string "PRESS ANY KEY"
-	MOV	#050304, R2
-	MOV	#000014, R1		; 12.
-	CALL	K01704			; PRINT string " TO CONTINUE"
-	CALL	L13024			; KPASE
-	CALL	L13100			; PAWS0
-	POP	R1
-	JMP	L11224			; Return to Menu => CLAW1
-
-; REDEF: Redefine Keys selected in Menu
-L12316:	CALL	L10320			; CLSLF Clear Menu left part
-	MOV	#<L13540+2>, R3		; "REDEFINE KEYS"
-	MOV	#000015, R1		; 13.
-	CALL	PRINSP			; PRINT string
-	.WORD	040106
-	NOP1
-	CALL	L13024			; KPASE Empty keyboard buffer
-	MOV	#040204, R2
-	MOV	#L13115, R3		; "UP   " etc.
-	PUSH	R5
-	MOV	#000005, R5		; 5 keys
-	MOV	#L15775, R4		; KEYSEL Redefined keys address
-L12370:	MOV	#000005, R1		; <  5.
-L12374:	MOV	R2, #000000		;!!MUT-ARG!!
-	CALL	K01704			; PRINT string
-	PUSH	R3
-L12406:	CALL	L13036			; KEYB Read a key
-	CMPB	R0, #000133
-	BHIS	L12406
-	CMPB	R0, #000040		; ' '
-	BEQ	L12450
-	CMPB	R0, #000060		; '0'
-	BLO	L12406
-	CMPB	R0, #000072		; ':'
-	BLO	L12450
-	CMPB	R0, #000101		; 'A'
-	BLO	L12406
-L12450:	MOVB	R0, <L13112+1>		; set key name
-	MOV	<L12374+2>, R2
-	ADD	#000006, R2		; + 6.
-	MOV	#L13112, R3		; String - key name in quotes
-	MOV	#000003, R1		; 3-char
-	CALL	K01704			; PRINT string
-	MOVB	<L13112+1>, R0		; get key name
-	MOVB	R0, (R4)+
-	ADD	#000002, R4		; + 2.
-	CALL	L13024			; KPASE Empty keyboard buffer
-	MOV	<L12374+2>, R2
-	MOV	#000002, R3
-L12526:	ADD	#000040, R2		; <
-	BIT	#000340, R2
-	BNE	L12550
-	SUB	#000400, R2
-	ADD	#004000, R2
-L12550:	SOB	R3, L12526		; repeat
-	POP	R3
-	DEC	R5
-	BNE	L12370			; repeat
-	POP	R5
-	POP	R1
-	JMP	L11224			; Return to Menu
-	NOP2
-	NOP2
-;
-; INPUT procedure: Input NAME string, up to 11. chars
-L12570:	MOV	#000013, R1		; 11.
-	MOV	#K12440, R3		; NAME address
-L12600:	MOVB	#040, (R3)+		; < ' '
-	SOB	R1, L12600		; repeat
-	MOV	#000001, R1		; 1. = current position
-	MOV	#054646, K01606		; screen coords for cursor
-	MOV	#044246, R2
-	MOV	#K12440, R3		; NAME address
-; NXCHR:
-L12630:	PUSH	R1
-	PUSH	R2
-	MOV	K01606, R2		; get screen coords
-	MOV	#177777, R0		; XOR mask
-	CALL	L13224			; calc screen attr address and set attrs for 8x8 block
-	POP	R2
-L12652:	CALL	L13036			; KEYB Read a key
-	CMPB	R0, #000177		; Backspace key?
-	BEQ	L13616			; => DELETE
-	CMPB	R0, #000015		; Enter key?
-	BEQ	L13004			; => ENTER
-	CMP	(SP), #000014		; position >= 12. ?
-	BHIS	L12652			; yes =>
-	CMPB	R0, #000040		; == ' ' ?
-	BEQ	L12736			; yes => SPACE
-	CMPB	R0, #000101		; 'A'
-	BLO	L12652
-	CMPB	R0, #000133
-	BHIS	L12652			; greater or equal =>
-; SPACE: Print char R0
-L12736:	MOVB	R0, (R3)
-	MOV	#000001, R1
-	PUSH	R2
-	CALL	K01704			; PRINT string; char will erase the cursor
-	NOP2	;MOV	K01606, R2		; screen coords
-	NOP2	;MOV	#177777, R0
-	NOP2	;CALL	L13224			; calc screen attr address and set attrs for 8x8 block
-	INC	K01606			; increase cursor position
-	POP	R2
-	INC	R2
-	INC	(SP)			; increase position
-L13000:	POP	R1
-	BR	L12630			; => NXCHR
-L13004:	POP	R1
-	MOV	K01606, R2		; screen coords for cursor
-	MOV	#177777, R0		; XOR mask
-	JMP	L13224			; calc screen attr address and set attrs for 8x8 block
-; DELETE:
-L13616:	CMPB	(SP), #001		; position == 1 ?
-	BEQ	L12652			; yes =>
-	DECB	(SP)			; decrease current position
-	DEC	R2
-	MOVB	#040, -(R3)		; 32.
-	MOV	#000001, R1		; 1.
-	PUSH	R2
-	CALL	K01704			; PRINT string
-	MOV	K01606, R2		; screen coords for cursor
-	MOV	#177777, R0		; XOR mask
-	CALL	L13224			; calc screen attr address and set attributes for 8x8 block
-	DEC	K01606			; decrease cursor position
-	POP	R2
-	DEC	R3
-	BR	L13000			; => ENDDL
-	NOP2
-	NOP2
-;
-; Keyboard selected in Menu
-L13146:	CALL	L13424			; NOCOL Clear Menu selection
-	MOV	#040202, R3		; screen coords for Keyboard sign
-	CLR	R0			; input method = 0
-L13176:	CALL	L13464			; SETCOL Show Menu selection
-	JMP	L11464			; Continue to Menu
-; Joystick selected in Menu
-L13206:	CALL	L13424			; NOCOL Clear Menu selection
-	MOV	#040302, R3		; screen coords for Joystick sign
-	MOV	#000001, R0		; input method = 1
-	BR	L13176			; Show Menu selection and Continue to Menu
-;
-L12030:	.ASCII	/MISSION CODE/
-L12044:	.ASCII	/NOT RECOGNISED/
-; CODES:
-L12062:	.ASCII	/SATORI     /
-	.ASCII	/DIM MAK    /
-	.ASCII	/MI LU KATA /
-	.ASCII	/GENIN      /
-	.ASCII	/SAIMENJITSU/
-	.ASCII	/KUJI KIRI  /
-	.ASCII	/KIME       /
-	.ASCII	/JONIN      /
-	.ASCII	/           /
-L12225:	.ASCII	/TYPE REQUIRED/
-	.ASCII	/MISSION CODE/
-	.ASCII	/OR PRESS ENTER/
-	.ASCIZ	/FOR FIRST MISSION/
-;
-L13112:	.ASCII	/"/<000>/"/
-L13115:	.ASCII	/UP   /
-	.ASCII	/DOWN /
-	.ASCII	/LEFT /
-	.ASCII	/RIGHT/
-	.ASCII	/FIRE /
-	.EVEN
-;
-; KPASE procedure: Empty keyboard buffer
-L13024:	CALL	L13036			; KEYB Read a key
-	TSTB	R0
-	BNE	L13024
-	RETURN
-; KEYB procedure: Read a key
-L13036:
-	TSTB	@#177560
-	BPL	10$		; no key => exit
-	MOVB	@#177562, R0
-	RETURN
-10$:	CLR	R0		; empty key
-	RETURN
-	NOP3
-	NOP3
-	NOP3
-; PAWS0 procedure: Get a key
-L13100:	CALL	L13036			; KEYB Read a key
-	TSTB	R0
-	BEQ	L13100
-	RETURN
-
-	NOP3
-	NOP3
-	NOP2
-	NOP2
-	NOP1
-;
-; Procedure: Calculate screen attr address and set attributes for 8x8 block
-L13224:	CALL	L13242			; calculate screen attr address
-	CALL	L13312			; set attributes for 8x8 block
-	MOV	<L13242+2>, R2		; restore R2
-	RETURN
-;
 ; Procedure: Calculate screen attr address
 L13242:	MOV	R2, #000000		;!!MUT-ARG!!
 	BIC	#176037, R2		; keep bits: 001111100000 = row * 32.
@@ -5207,79 +4872,7 @@ L13242:	MOV	R2, #000000		;!!MUT-ARG!!
 	ADD	(SP)+, R2
 	ADD	#SCRTOP, R2		; R2 = screen address
 	RETURN
-;
-; Procedure: Set attributes for 8x8 block; R0 = attribute, R2 = screen address
-L13312:
-	ADD	#<120*7>, R2
-	MOV	R2, @#176640	; УКНЦ
-	XOR	R0, @#176642		; #7
-	ADD	#000120, R2
-	MOV	R2, @#176640	; УКНЦ
-	XOR	R0, @#176642		; #8
-	RETURN
-	NOP1
-	NOP3
-	NOP3
-	NOP3
-	NOP3
-	NOP3
-	NOP3
-	NOP1
-; NOCOL procedure: Clear Menu selection
-L13424:	CLR	R0			; filler = 0
-; BRGO1:
-L13430:	MOV	#040202, R2		; !!MUT-ARG!! screen coords
-	CALL	L13242			; calc screen addr
-	ADD	#001200, R2
-	MOV	#000015, R1		; 13.
-L13444:	MOV	R2, @#176640		; < Порт адреса косвенной записи УКНЦ
-	MOV	R0, @#176642		;   Порт данных косвенной записи УКНЦ
-	INC	R2
-	SOB	R1, L13444		; repeat
-	RETURN
-; SETCOL procedure: Show Menu selection; R0 = input method
-L13464:	NOP2	;	MOVB	R0, K41304		; Save input method selection
-	MOV	R3, <L13430+2>		; set screen coords
-; INICL:
-L13474:	MOV	#177777, R0		; filler
-	BR	L13430
-;
-; Text for Menu
-L13502:	.ASCII	/K  KEYBOARD/
-	.ASCII	/J  JOYSTICK/
-L13540:	.ASCII	/R  REDEFINE KEYS/
-	.ASCII	/P  PALETTE/
-	.ASCII	/M  ALTER MISSION/
-	.ASCII	/S  START GAME/
-	.ASCII	/X  EXIT/
-;
-L13706:	.ASCII	/CONGRATULATIONS/
-	.ASCII	/YOU ARE NOW A TRUE/
-	.ASCII	/NINJA SABOTEUR/
-	.ASCII	/ENTER YOUR NAME/
-;
-L14004:	.ASCII	/HIGH SCORES/
-L14017:	.ASCII	/001000IGOR IWAN  /
-	.ASCII	/000140IWAN ALEKS /
-	.ASCII	/000130GENNADIJ P./
-	.ASCII	/000120JURIJ IGOR /
-	.ASCII	/000110LENA       /
-	.ASCII	/000100DARREN     /
-	.ASCII	/000090NOEL       /
-	.ASCII	/000080BRAD       /
-	.ASCII	/000070NICKY      /
-	.ASCII	/000060JUSTIN     /
-	.ASCII	/000050CLAIRE     /
-	.ASCII	/000040JOE T ARAO /
-	.ASCII	/000030ALAN       /
-	.ASCII	/000020RICH       /
-	.ASCII	/000010DIV        /
 
-L14416:	.ASCII	/SPARE SCORE+NAME /
-
-L14437:	.ASCII	/0 /			; ZERO
-	.EVEN
-;
 ; NRGUP procedure ??
 L14442:	MOV	#<L14534+2>, R3		; NRGPX+1
 	CLC
@@ -5290,11 +4883,10 @@ L14456:	BISB	#000200, (R3)
 	MOV	#<L14506+2>, R3		; NRGCR+1
 	INCB	(R3)
 L14470:	RETURN
-;
+
 ; DECEN procedure: Decrement energy, R1 = ??
 L14472:	MOV	#000001, R0		;!!MUT-ARG!!
 	BEQ	L14470			; 0 => to RETURN
-	NOP1
 ; DECN2:
 L14502:	PUSH	R1
 	PUSH	R5
@@ -5309,7 +4901,7 @@ L14506:	MOV	#000000, R2		;!!MUT-ARG!!
 ; NRGPX:
 L14534:	MOVB	#000, R5		;!!MUT-ARG!!
 	MOV	#8., R1			; DY
-	MOVB	L23024(R5), R5		; mirror byte для УКНЦ
+	MOVB	ReflectionTable(R5), R5		; mirror byte для УКНЦ
 	BIC	#177400, R5		; УКНЦ оставляем байт
 L14560:	MOV	R3, @#176640	; УКНЦ
 	XOR	R5, @#176642	; УКНЦ
@@ -5331,188 +4923,61 @@ L14560:	MOV	R3, @#176640	; УКНЦ
 	MOVB	#001, K33540		; set DEAD = 1
 	CLRB	<L14472+2>		; clear (DECEN+1)
 	RETURN
-	NOP3
-	NOP3
+
 ; NRGC1:
 L14664:	POP	R5
 	POP	R1
 	SOB	R1, L14502		; repeat => DECN2
 	RETURN
-; COMPL:
-L14674:	CALL	L15506			; PLFHN - MONEY up 500.
-; Delay
-	MOV	#165140, R1
-L14704:	DEC	R1			; <
-	MOVB	#006, R0		; | 6.
-L14712:	DECB	R0
-	BNE	L14712
-	TST	R1
-	BNE	L14704			; repeat
-;
-			;CALL	L07634			; INITHI Draw Ninja for Menu
-	nop
-	nop
-	MOVB	K11770, R5		; get CONQU
-	MOVB	K51146, R0		; get TAPTT
-	DECB	R5
-	BEQ	L14746
-	MOVB	K51145, R0		; get TAPCT
-L14746:	MOV	#K52626, R3		; NTPND address
-	CMPB	R0, (R3)
-	BHIS	L14762
-	JMP	L10606			; => FNISH - Finish the game
-L14762:	CALL	L15506			; PLFHN - MONEY up 500.
-	CALL	L15506			; PLFHN - MONEY up 500.
-	MOV	#050141, R2
-	MOV	#115274, R3		; TOTM
-	MOVB	#005, R1		; 5.
-	CALL	K01704			; PRINT string
-	MOV	#L15530, R3		; "CONGRATULATIONS"
-	MOV	#040103, R2
-	MOV	#000017, R1		; 15.
-	CALL	K01704			; PRINT string "CONGRATULATIONS"
-	MOV	#040241, K01606
-	MOV	#000022, R1		; 18.
-	CALL	K01704			; PRINT string "YOU HAVE COMPLETED"
-	MOV	#040340, R2
-	MOV	#000025, R1		; 21.
-	CALL	K01704			; PRINT string "YOUR ASSIGNED MISSION"
-	MOVB	MLEVEL, R0		; get MSLEV Mission Level
-	CMPB	R0, #000011		; 9. last level?
-	BNE	L15302
-	MOV	#L15166, R3		; "YOU HAVE REACHED"
-	MOV	#044042, R2
-	MOV	#000020, R1		; 16.
-	CALL	K01704			; PRINT string "YOU HAVE REACHED"
-	MOV	#044141, R2
-	MOV	#000022, R1		; 18.
-	CALL	K01704			; PRINT string "THE ULTIMATE LEVEL"
-	MOV	#044302, R2
-	MOV	#000021, R1		; 17.
-	CALL	K01704			; PRINT string "YOU HAVE MASTERED"
-	MOV	#050001, R2
-	MOV	#000023, R1		; 19.
-	CALL	K01704			; PRINT string "THE ART OF NINJITSU"
-	BR	L15436			; => HAK02
-	NOP1
-;
-L15166:	.ASCII	/YOU HAVE REACHED/
-	.ASCII	/THE ULTIMATE LEVEL/
-	.ASCII	/YOU HAVE MASTERED/
-	.ASCII	/THE ART OF NINJITSU/
-	.ASCII	/TOTAL/
-	.EVEN
-;
-; HAK01:
-L15302:	ADD	#000061, R0		; + 49.
-	MOVB	R0, 115640		; get (NXMSC+18.)
-	MOV	#L15616, R3		; "THE CODE FOR"
-	MOV	#044144, R2
-	MOV	#000014, R1		; 12.
-	CALL	K01704			; PRINT string "THE CODE FOR"
-	MOV	#044245, R2
-	MOV	#000012, R1		; 10.
-	CALL	K01704			; PRINT string "STAGE X IS"
-	MOV	#044345, R2
-	MOV	#000001, R1		; 1.
-	CALL	K01704			; PRINT string
-	CLR	R0
-	BISB	MLEVEL, R0		; get MSLEV Mission Level
-	MOV	#112212, R3		; CODES+88.
-L15374:	SUB	#000013, R3		; < - 11.
-	SOB	R0, L15374		; repeat
-	MOV	#000013, R1		; 11.
-	ADD	#000001, R2		; + 1.
-	CALL	K01704			; PRINT string
-	MOV	#113114, R3		; RSEE3+2
-	MOV	#000001, R1		; 1.
-	ADD	#000013, R2		; + 11.
-	CALL	K01704			; PRINT string
-; HAK02:
-L15436:	NOP2				;	MOV	#K07336, R3		; "PRESS ANY KEY"...
-	MOV	#050244, R2
-	MOV	#000015, R1		; 13.
-	CALL	K01704			; PRINT string "PRESS ANY KEY"
-	MOV	#050304, R2
-	MOV	#000014, R1		; 12.
-	CALL	K01704			; PRINT string " TO CONTINUE"
-	CALL	L13024			; KPASE
-	CALL	L13100			; PAWS0
-	JMP	L10606			; => FNISH - Finish the game
-; PLFHN procedure: MONEY up 500.
+
+; COMPL game is completed
+Completed:
+	; TODO: pause a little
+	; TODO: check for real completition?
+	; all codes accepted etc?
+Finished:
+	clr	@#PpuKeys
+10$:	bit	#220, @#PpuKeys		; check FIRE | STOP keys
+	beq	10$
+	jmp	Start			; FIN
+
+; money up 500
 L15506:	MOV	#000372, R1		; 250.
 	CALL	L10244			; MONUP
 	MOV	#000372, R1		; 250.
 	JMP	L10244			; MONUP
-	NOP1
-;
-L15530:	.ASCII	/CONGRATULATIONS/
-L15547:	.ASCII	/YOU HAVE COMPLETED/
-L15571:	.ASCII	/YOUR ASSIGNED MISSION/
-L15616:	.ASCII	/THE CODE FOR/
-L15632:	.ASCII	/STAGE X IS"/
-	.EVEN
 
 L15646:	.WORD	0	; RMTIME
-;
-; CRUNCH procedure: Sound CRUNCH noise
-L15650:	MOV	#000144, R1		; 100.
-	CALL	Random			; Get random number
-	BICB	#177417, R0
-	BISB	#000340, R0
-	MOV	R0, R3
-	SWAB	R3
-; Sound
-	CLR	R0			; значение для порта 177716 БК
-	MOV	#100, R2		; бит звука
-L15674:	XOR	R2, R0
-	NOP2	;MOV	R0, @#177716
-	NOP2	;MOVB	(R3)+, K01604
-L15722:	NOP2	;DECB	K01604
-	NOP
-	NOP1	;BNE	L15722
-	NOP1	;XOR	R2, R0
-	NOP2	;MOV	R0, @#177716
-	SOB	R1, L15674		; repeat
-	RETURN
-	NOP3
-	NOP3
-	NOP2
-;
-L15756:
-	.BYTE	070,001,010, 062,002,004, 064,010,002
-	.BYTE	066,004,001, 065,001,020
-; Redefined keys stored here
-L15775:
-	.BYTE	070,001,010, 062,002,004, 064,010,002
-	.BYTE	066,004,001, 065,001,020
+
+; sound procedure
+L15650:	return
+
 
 ; Computerized font, 59 chars 8x8
 @include S2FNT2.MAC
 ;
 @include S2NINA.MAC
 
-	; WARNING!
-	.if NE 122624-.
-	.error Addresses (122624) not in place
-	.endc 
+; reflection table +/- 128. bytes
+	.blkb	200
+ReflectionTable:
+	.blkb	200
 
-; Reflection table, but starting from 128., 256. bytes; see K06660
-L22624:	.blkb	200
-L23024:	.blkb	1300
+; tile screens 32x18 = 576. bytes
+; 124324
+BuffD:	.blkb	1100			; BUFFD - Contact tile screen address
+; 125424
+BuffB:	.blkb	1100			; BUFFB - Back tile screen address
+; 126524
+BuffO:	.blkb	1100			; BUFFO - Front tile screen address
+; 127624
+BuffN:	.blkb	1100			; BUFFN - Ninja tile screen address
+; 130724
+BuffG1:	.blkb	1100			; BUFFG1 - Enemy 0 tile screen address
+; 132024
+BuffG2:	.blkb	1100			; BUFFG2 - Enemy 1 tile screen address
 
-; Tile screen 32x18 = 576. bytes
-BuffD:
-L24324:	.blkb	1100			; BUFFD - Contact tile screen address
-; Tile screen 32x18 = 576. bytes
-L25424:	.blkb	1100			; BUFFB - Back tile screen address
-; Tile screen 32x18 = 576. bytes
-L26524:	.blkb	1100			; BUFFO - Front tile screen address
-; Tile screen 32x18 = 576. bytes
-L27624:	.blkb	1100			; BUFFN - Ninja tile screen address
-; Tile screen 32x18 = 576. bytes
-L30724:	.blkb	1100			; BUFFG1 - Enemy 0 tile screen address
-; Tile screen 32x18 = 576. bytes
-L32024:	.blkb	1100			; BUFFG2 - Enemy 1 tile screen address
+; 043310 magic number addition replacement
+CBuffsDiffA =: BuffD - 61014
 
 	.END	STCORE
