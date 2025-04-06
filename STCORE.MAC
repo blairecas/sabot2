@@ -24,6 +24,8 @@ C_PPU_MUSIC0	=: 4			; music #0 init
 C_PPU_MUSIC1	=: 5			; music #1 init
 C_PPU_PLAY	=: 6			; play one frame of music
 C_PPU_MUTE	=: 7			; mute music
+C_PPU_SOUND1	=: 8.			; 'step' sound
+C_PPU_SOUND2	=: 9.
 
 
 ; Special comments-warnings in the code:
@@ -691,6 +693,17 @@ ClearBuffGuards:
 	MOV	#BuffG1, R3			; BUFG1 Enemy 0 tile screen address
 	MOV	#000220, R1			; 144.
 	BR	ClearBuff			; fill Enemy 0/1 tile screens
+
+
+; ask PPU to sound 'step'
+SoundStep:
+	mov	#C_PPU_SOUND1, PpuComm
+	return
+
+; sound 2
+Sound2:
+	mov	#C_PPU_SOUND2, PpuComm
+	return
 
 
 ; //////////////////////////////////////////////////////////////////////////////
@@ -2333,7 +2346,8 @@ K26376:	MOV	#K26672, R3		; GDHIT address
 	BEQ	K26546			; => NGDHT
 	MOV	#000002, R1		; 2.
 	CALL	L10244			; MONUP
-	CALL	L15650			; Sound CRUNCH noise
+	call	Sound2
+;	CALL	L15650			; Sound CRUNCH noise
 	MOV	#026666, R3
 	DECB	(R3)
 	BEQ	K26464			; CRUSN
@@ -3762,28 +3776,9 @@ K41000:	MOVB	046775, K01602		; room number
 	CMPB	R0, #004		; == 4 ?
 	BNE	K41144
 	MOV	#K47030, K41150+2
-
-;	MOV	#000001, R5		; sound duration = 1
-;	CMPB	050164, #000376
-;	BEQ	K41074
-;	MOV	#000012, R5		; sound duration = 10.
-;
-; TODO Sound
-;K41074:
-;	CLR	R0			; < значение для порта 177716 БК
-;	MOV	#100, R2		;   бит звука
-;K41100:	XOR	R2, R0
-;	NOP2	;MOV	R0, @#177716
-;	XOR	R2, R0
-;	NOP2	;MOV	R0, @#177716
-;	CLR	R0
-;	XOR	R2, R0
-;	NOP2	;MOV	R0, @#177716
-;	XOR	R2, R0
-;	NOP2	;MOV	R0, @#177716
-;	SOB	R5, K41074		; repeat
-;	NOP3
-
+	; step sound
+	call	SoundStep
+	;
 	clr	R0
 K41144:	movb	R0, K41172		; set LEGP
 K41150:	mov	#000000, R3		;!!MUT-ARG!! (!!!) must be even addr

@@ -39,6 +39,7 @@ C_PPU_MUSIC0	=: 4			; music #0 init
 C_PPU_MUSIC1	=: 5			; music #1 init
 C_PPU_PLAY	=: 6			; play one frame of music
 C_PPU_MUTE	=: 7			; mute music
+C_PPU_SOUND1	=: 8.			; 'step' sound
 
 
 	.asect
@@ -231,6 +232,7 @@ SetOther:
 	bic	#^B0000001000000000, @#177054	; enable vsync in CPU
 	bic	#^B0000000100000000, @#177054	; enable vsync in PPU
 	bic	#^B0001111110000000, @#177716	; sound init (mixer off)
+	mov	#200, @#306			; psw for ppu timer interrupt
 	; keyboard
 	mov	PC, R0
 	add	#KeyInt-., R0
@@ -286,6 +288,8 @@ Main:	call	DrawTiles			;
 	jmp	InitMusic1			; 5
 	jmp	PlayMusic			; 6
 	jmp	MuteMusic			; 7
+	jmp	Sound1				; 8.
+	jmp	Sound2				; 9.
 	; ...
 
 Exit:	mtps	#200
@@ -754,6 +758,10 @@ PpuUnpack:
 	br	60$ 
 
 
+; //////////////////////////////////////////////////////////////////////////////
+; // Music
+; //////////////////////////////////////////////////////////////////////////////
+
 ; init music #0 (if have AY device)
 InitMusic0:
 	tst	HaveAY
@@ -794,7 +802,94 @@ MuteMusic:
 99$:	jmp	Done
 
 
-; data
+; //////////////////////////////////////////////////////////////////////////////
+; // Sound
+; //////////////////////////////////////////////////////////////////////////////
+
+; 'step' sound
+Sound1:	mov	#1, R0
+	br	PlaySound
+
+
+; 
+Sound2:	mov	#2, R0
+	br	PlaySound
+
+
+SoundAddr:	.word	0
+
+; start sound
+; R0 - sound #
+PlaySound:
+	call	TimerInit
+	asl	R0				; to word
+	add	PC, R0
+	add	#SoundTable-., R0
+	add	(R0), R0
+	beq	99$
+	clr	R1
+	mov	(R0)+, R1
+	beq	99$
+	mov	R0, SoundAddr
+	mov	R1, @#177712			; load counter
+	tst	@#177714
+	tst	@#177714
+	bic	#200, @#177716			; sound to LO
+	mov	PC, @#304
+	add	#SoundIntHi+2-., @#304		; set sound interrupt to HI
+	mov	#^B01000001, @#177710		; allow int, start, timer = 4 mks
+99$:	jmp	Done
+
+; sound timer interrupt (LO)
+SoundIntLo:
+	bic	#200, @#177716
+	mov	PC, @#304
+	add	#SoundIntHi+2-., @#304
+	br	SoundIntNext
+; sound timer interrupt (HI)
+SoundIntHi:
+	bis	#200, @#177716
+	mov	PC, @#304
+	add	#SoundIntLo+2-., @#304
+SoundIntNext:
+	mov	@SoundAddr, @#177712		; update timer
+	beq	90$				; end of sound?
+	add	#2, SoundAddr
+	tst	@#177714
+	tst	@#177714
+	rti
+90$:	clr	@#177710			; stop timer and ints
+	tst	@#177714
+	tst	@#177714
+	rti
+
+; timer init (stop, clear counter)
+TimerInit:
+	clr	@#177710			; clear control, stop
+	clr	@#177712			; clear buffer
+	tst	@#177714
+	tst	@#177714
+	return
+
+SoundTable:	.word	0, Snd001-., Snd002-.
+
+.radix 10
+
+; 'step' sound
+Snd001:	.word	50, 0
+
+; guard was hit 
+Snd002:	.word	194, 79, 37, 26, 75, 25, 210
+	.word	41, 37, 76, 26, 52
+	.word	0
+
+.radix 8 
+
+
+; //////////////////////////////////////////////////////////////////////////////
+; // Data
+; //////////////////////////////////////////////////////////////////////////////
+
 BackClrTbl:	.word	^B0000000000000000, ^B0000000000000000
 		.word	^B0001000100010001, ^B0001000100010001
 		.word	^B0010001000100010, ^B0010001000100010
