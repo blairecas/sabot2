@@ -1,7 +1,7 @@
 	.title	STCORE
 	.enabl	LC
 
-C_MAX_RAM	=: 135000
+C_MAX_RAM	=: 124000
 PpuAddr		=: C_MAX_RAM
 PpuComm		=: C_MAX_RAM+2
 PpuData		=: C_MAX_RAM+4
@@ -17,6 +17,7 @@ SCRTOP 		=: SCREEN+4
 TILES_DX	=: 32.
 TILES_DY	=: 18.
 
+C_PPU_EXIT      =: 177777		; exit PPU code
 C_PPU_INITILE	=: 1			; init tiles draw routine
 C_PPU_PALETTE1	=: 2			; set normal (title) palette
 C_PPU_PALETTE2	=: 3			; set second (game) palette
@@ -25,7 +26,7 @@ C_PPU_MUSIC1	=: 5			; music #1 init
 C_PPU_PLAY	=: 6			; play one frame of music
 C_PPU_MUTE	=: 7			; mute music
 C_PPU_SOUND1	=: 8.			; 'step' sound
-C_PPU_SOUND2	=: 9.
+C_PPU_SOUND2	=: 9.			; 'guard was hit' sound
 
 
 ; Special comments-warnings in the code:
@@ -236,6 +237,11 @@ K01610:	.byte	0			; offset value in room marker processing
 K01611:	.byte	0
 
 
+NinaOnFire:	.word	0
+NinaCanShock:	.word	0
+FramesCount:	.word	0
+
+
 ; DOPIC procedure: Show the room on the screen
 DrawScreen:
 	; check STOP key here
@@ -243,8 +249,9 @@ DrawScreen:
 	beq	10$
 	jmp	Start
 10$:	; draw then
-FramesCount =: .+2
-	inc	#000000
+	inc	FramesCount
+	clr	NinaOnFire
+	clr	NinaCanShock
 	; "снизу-вверх" будет быстрее, но выглядит "корявее"...
 	; ну тут начались извраты, как уменьшить прохождение 1100(8) байт экрана
 	; на удивление этот вариант быстрей чем проходить их побайтно
@@ -259,7 +266,11 @@ DrawScrCycle:
 DrawScrCont:
 	cmp	R4, #TILES_DX*TILES_DY+BuffD
 	blo	DrawScrCycle
-	return
+	; check hit by flames
+	mov	NinaOnFire, R1
+	beq	99$
+	call	Decen
+99$:	return
 DrawScrWord:
 	tstb	R0
 	beq	10$
@@ -276,6 +287,7 @@ DrawScrWord:
 TBufBgr:
 	clr	R1
 	bisb	BuffB(R5), R1			; get tile from BUFFB: Back tile screen
+	movb	ElectroTbl(R1), NinaCanShock	; Nina can be shocked with some background
 	mul	#10., R1			; tile is 10. bytes
 	add	#BackTiles, R1
 	; advance tile buf addr
@@ -303,7 +315,7 @@ TBufGuard1:
 	bisb	BuffG1(R5), R1
 	incb	R1
 	beq	TBufGuard2
-	movb	GuardTilesAttr(R1), TOvClr	; add guard tiles color attribute
+	movb	GuardTilesAttr(R1), TOvClr	; add guard 1 tiles color attribute
 	asl	R1
 	asl	R1
 	asl	R1
@@ -317,7 +329,6 @@ TBufGuard2:
 	bisb	BuffG2(R5), R1
 	incb	R1
 	beq	TBufNina
-;	bisb	GuardTilesAttr(R1), TOvClr	; add guard tiles color attribute
 	asl	R1
 	asl	R1
 	asl	R1
@@ -325,32 +336,14 @@ TBufGuard2:
 	movb	K36040, TOvDir			; set guard 2 DIR
 	call	TileOver
 
-; check Nina shocked
-; WILSN:
-;	MOVB	K04673, R0		; get BAKCR
-;	CMPB	R0, #000117		; == 79. ?
-;	BLO	K03516			; => OBJD
-;	CMPB	R0, #000126		; == 86. ?
-;	BHIS	K03516			; => OBJD
-;	MOVB	<L14472+2>, R0		; get (DECEN+1)
-;	BEQ	K03560			; invulnerable 
-;	MOVB	#001, K36216		; set ELECU = 1: electroshocked
-
-; check Nina was hit by flamethrower
-;	MOVB	K41174, R0		; get (FFCOL+1)
-;	BEQ	K03560			; => HYPNO
-;	PUSH	R3
-;	MOVB	#003, R1
-;	CALL	L14472			; DECEN
-;	POP	R3
-
 ; Nina
 TBufNina:
 	clr	R1
 	bisb	BuffN(R5), R1
 	incb	R1
 	beq	TBufFore
-;	bisb	NinaTilesAttr(R1), TOvClr	; add Nina tiles color attribute
+	add	TOvClr, NinaOnFire		; if were flamethrower - add it 
+	add	NinaCanShock, NinaOnFire	; if on electric fence - add it too
 	asl	R1
 	asl	R1
 	asl	R1
@@ -589,6 +582,27 @@ GuardTilesAttr:
 	.byte	0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 360 - 400
 ; (waste of memory to color only flamethrower, but alas..)
 
+; waste of memory too ^_^
+; 117 - 126 - electric fence
+ElectroTbl:
+	.byte	 0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 000 - 020
+	.byte	 0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 020 - 040
+	.byte	 0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 040 - 060
+	.byte	 0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 060 - 100
+	.byte	 0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0,20 ; 100 - 120
+	.byte	20,20,20,20,20,20,20, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 120 - 140
+	.byte	 0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 140 - 160
+	.byte	 0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 160 - 200
+	.byte	 0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 200 - 220
+	.byte	 0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 220 - 240
+	.byte	 0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 240 - 260
+	.byte	 0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 260 - 300
+	.byte	 0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 300 - 320
+	.byte	 0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 320 - 340
+	.byte	 0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 340 - 360
+	.byte	 0, 0, 0, 0, 0, 0, 0, 0,  0, 0, 0, 0, 0, 0, 0, 0 ; 360 - 400
+
+
 ; PANMS - Indicator signs
 K12405:	.ASCII	/HELD/
 	.ASCII	/TIMER/
@@ -596,6 +610,7 @@ K12405:	.ASCII	/HELD/
 K12422:	.ASCII	/ /
 K12423:	.ASCII	/PAY $0000000 /		; MONEY
 K12440:	.ASCIZ	/XXXXXXXXXXX/		; NAME
+MsgClr:	.asciz	<33>"%!3"<14>
 	.even
 
 ; level 9 pointer and data
@@ -700,10 +715,36 @@ SoundStep:
 	mov	#C_PPU_SOUND1, PpuComm
 	return
 
-; sound 2
+; sound 2 (guard was hit)
 Sound2:
 	mov	#C_PPU_SOUND2, PpuComm
 	return
+
+
+; channel 2 data
+PPmsg:	.word	PPArr
+        .word	177777
+PPArr:	.byte	0				; 23334 return value (0 - OK)
+PPCmd:	.byte	2				; 23335 command (2 - release mem)
+PPDev:	.word	32				; 23336 device type (0x-FD, 32-ppu mem)
+PPApp:	.word	0				; 23340 argument(s) (PPU addr for mem operations)
+PPAcp:	.word	0				; 23342 CPU addr (length in words for mem allocate)
+PPLen:	.word	0				; 23344 length in words
+
+; send to PPU by channel 2
+PPSen:	mov	#PPMsg, R2
+	mov	#5, R3
+	br	20$
+10$:	movb	(R2)+, @#176676
+20$:	tstb	@#176674
+	bpl	20$
+	sob	R3, 10$
+	return
+
+; release PPU mem
+PpuRelease:
+	mov	PpuAddr, PPApp
+	br	PpSen
 
 
 ; //////////////////////////////////////////////////////////////////////////////
@@ -725,12 +766,25 @@ Start:	; reset
 	; check keys
 	mov	@#PpuKeys, R0
 	beq	10$
-	; start game or exit to OS
 	clr	PpuKeys
 	.ppexe	#C_PPU_MUTE			; mute music
-	; TODO: check for STOP key and exit to OS
 	.ppexe	#C_PPU_PALETTE2
-
+	; STOP was pressed?
+	bit	#200, R0
+	beq	20$
+	; exit to RT-11 or whatever..
+	mtps	#200
+	.ppexe	#C_PPU_EXIT			; ask PPU to exit
+	call	PpuRelease			; free PPU mem
+	mov	Bkp100, @#100			; restore vsync int
+	mov	Bkp102, @#102
+	mtps	#0
+	mov	#MsgClr, R0			; clear screen
+	emt	351
+	clr	R0
+	emt	350
+	halt
+20$:	; starting game
 	; init timer characters (no timer heh)
 	mov	#K36204, R2
 	movb	#'8, (R2)+
@@ -979,8 +1033,8 @@ K12514:	MOVB	#060, (R3)+		; <
 	MOVB	R0, <L14534+2>		; set (NRGPX+1) = 1
 
 ; DEBUG:
-;	clrb	L14472+2
-	MOVB	R0, <L14472+2>		; set (DECEN+1) = 1
+;	clrb	Decen+2
+	MOVB	R0, <Decen+2>		; set (DECEN+1) = 1
 
 	MOVB	R0, K33464		; set HELD value = 1 = Shuriken
 	MOVB	R0, K33465		; set NEAR value = 1
@@ -1522,7 +1576,7 @@ K16324:	; we will NOT hide ladder - let users know about room below
 
 ; Room marker $1D 035 - ??? 3x3 tiles
 ; infinite energy room - treasure chest
-K16350:	CLRB	<L14472+2>		; clear (DECEN+1)
+K16350:	CLRB	<Decen+2>		; clear (DECEN+1)
 	MOV	#K16306, R4		; copy from
 	MOVB	#003, K01604		; width = 3
 	MOV	#000003, R1		; height = 3
@@ -2172,7 +2226,7 @@ K25276:	CALL	K36266			; MANDR
 	MOV	#000002, R1
 	TSTB	(R3)
 K25354:	BNE	K25362
-	CALL	L14472			; DECEN
+	CALL	Decen			; DECEN
 ; NDRON:
 K25362:	MOVB	K77520, R0		; get GLGP1
 	INCB	R0
@@ -2558,7 +2612,7 @@ K27670:	MOV	#K26670, R3
 	BEQ	K27732
 	CALL	L15650			; Sound CRUNCH noise
 	MOVB	#000014, R1
-	CALL	L14472			; DECEN
+	CALL	Decen			; DECEN
 ; NUN52:
 K27732:	POP	R3
 ; NUN1:
@@ -2668,7 +2722,7 @@ K30324:	MOV	#K26670, R3
 	BEQ	K30366
 	CALL	L15650			; Sound CRUNCH noise
 	MOV	#000007, R1
-	CALL	L14472			; DECEN
+	CALL	Decen			; DECEN
 ; NUN25:
 K30366:	POP	R3
 K30370:	DECB	(R3)
@@ -2683,7 +2737,7 @@ K30406:	MOVB	#003, 000013(R4)
 ;
 K30422:	CALL	L15650			; Sound CRUNCH noise
 	MOVB	#006, R1		; 6.
-	CALL	L14472			; DECEN
+	CALL	Decen			; DECEN
 	MOVB	#001, 000013(R4)
 	MOV	#076757, R3		; DOGL2
 ; ENDGP:
@@ -3017,7 +3071,7 @@ K32302:	SUB	#002200, R3
 	CMPB	(R3), #000340
 	BHIS	K32350
 	MOV	#000005, R1
-	CALL	L14472			; DECEN
+	CALL	Decen			; DECEN
 	CALL	L15650			; Sound CRUNCH noise
 	CMPB	(R4), #000340
 	BLO	K32102
@@ -3135,7 +3189,7 @@ K33012:	CALL	Random			; Get random number
 	nop
 	nop
 	MOV	#000024, R1		; 20.
-	CALL	L14472			; DECEN
+	CALL	Decen			; DECEN
 ; NICK:
 K33052:	TSTB	K33540			; check DEAD
 K33056:	BEQ	K33114			; alive =>
@@ -3875,7 +3929,7 @@ K50170:	CALL	K50274			; FLORQ
 	MOV	#000002, R1
 	TSTB	(R3)
 	BNE	K50230
-	CALL	L14472			; DECEN
+	CALL	Decen			; DECEN
 K50230:	INCB	K36211
 	MOV	K36212, R3		; get MANPS
 	ADD	#000040, R3
@@ -3932,7 +3986,7 @@ K50446:	BIT	#000002, R0		; bit 1 left ?
 	BEQ	K50514			; 0 => CRRT
 	CALL	K50572			; SWIMQ
 	MOV	#000002, R1
-	CALL	L14472			; DECEN
+	CALL	Decen			; DECEN
 	MOV	#047264, R2		; SWIMC -> (CHARN+1)
 	MOV	#K55644, R3		; SWILP -> (VECTN+1)
 	JMP	K55246			; => SETVC - set vectors
@@ -4281,13 +4335,25 @@ K52526:	MOVB	K51145, K51146		; copy TAPCT -> TAPTT
 	MOV	#K52646, R3		; "CODE ACCEPTED"
 	CALL	K01704			; PRINT string
 ; ERACD:
-K52544:	MOV	#050205, R2
-	MOV	R2, K51142		; set PTSPS
-	INC	R2
-	MOV	#L10560, R3		; SPCHR 21. space char string
-	MOV	#000016, R1		; 14.
-	CALL	K01704			; PRINT string
+K52544:
+;	MOV	#050205, R2
+;	MOV	R2, K51142		; set PTSPS
+;	INC	R2
+;	MOV	#L10560, R3		; SPCHR 21. space char string
+;	MOV	#000016, R1		; 14.
+;	CALL	K01704			; PRINT string
 	JMP	K25276			; => ENDVC
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
+	nop
 ; KODNA:
 K52576:	MOV	#K52630, R3		; " CODE  NEEDED "
 	CALL	K01704			; PRINT string
@@ -4579,7 +4645,7 @@ K54464:	.ASCII	/@@MISSION@@FAILURE@@/
 ;
 ; HIGHT:
 K54510:	MOV	#000001, R1		; 1.
-	CALL	L14472			; DECEN
+	CALL	Decen			; DECEN
 	CALL	L15650			; Sound CRUNCH noise
 	JMP	K50744			; => SETCR
 ; HJRRF:
@@ -4880,7 +4946,7 @@ L14456:	BISB	#000200, (R3)
 L14470:	RETURN
 
 ; DECEN procedure: Decrement energy, R1 = ??
-L14472:	MOV	#000001, R0		;!!MUT-ARG!!
+Decen:	MOV	#000001, R0		;!!MUT-ARG!!
 	BEQ	L14470			; 0 => to RETURN
 ; DECN2:
 L14502:	PUSH	R1
@@ -4916,7 +4982,7 @@ L14560:	MOV	R3, @#176640	; УКНЦ
 	POP	R5
 	POP	R1
 	MOVB	#001, K33540		; set DEAD = 1
-	CLRB	<L14472+2>		; clear (DECEN+1)
+	CLRB	<Decen+2>		; clear (DECEN+1)
 	RETURN
 
 ; NRGC1:
@@ -4974,5 +5040,7 @@ BuffG2:	.blkb	1100			; BUFFG2 - Enemy 1 tile screen address
 
 ; 043310 magic number addition replacement
 CBuffsDiffA =: BuffD - 61014
+
+EndOfCpu = .
 
 	.END	STCORE

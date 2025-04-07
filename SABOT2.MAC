@@ -4,7 +4,7 @@
 	.enabl	LC
 
 ; CPU RAM addrs
-C_MAX_RAM	=: 135000
+C_MAX_RAM	=: 124000
 PpuAddr		=: C_MAX_RAM
 PpuComm		=: C_MAX_RAM+2
 PpuData		=: C_MAX_RAM+4
@@ -32,6 +32,7 @@ TILES_DY	=: 18.
 
 TILE_DY		=: 8.
 
+C_PPU_EXIT      =: 177777		; exit PPU code
 C_PPU_INITILE	=: 1			; init tiles draw routine
 C_PPU_PALETTE1	=: 2			; set normal (title) palette
 C_PPU_PALETTE2	=: 3			; set second (game) palette
@@ -40,6 +41,7 @@ C_PPU_MUSIC1	=: 5			; music #1 init
 C_PPU_PLAY	=: 6			; play one frame of music
 C_PPU_MUTE	=: 7			; mute music
 C_PPU_SOUND1	=: 8.			; 'step' sound
+C_PPU_SOUND2	=: 9.			; 'guard was hit' sound
 
 
 	.asect
@@ -197,17 +199,7 @@ PpuStart:
 	call	PpuUnpack
 
 ClearVdata:
-	; clear screen vdata
-	mov	#177010, R4
-	mov	#177012, R3
-	mov	#177014, R5
-	mov	#100000, (R4)
-	mov	#100000, R0
-10$:	clr	(R5)
-	clr	(R3)
-	inc	(R4)
-	sob	R0, 10$
-
+	call	ClearScreen
 	call	SetVLines
 	mov	-4(SP), @#272
 
@@ -293,6 +285,7 @@ Main:	call	DrawTiles			;
 	; ...
 
 Exit:	mtps	#200
+	call	ClearScreen
 	; restore 0..1000
 	mov	PC, R0
 	add	#Bkp-., R0
@@ -434,6 +427,20 @@ VsyCnt:	.word	0
 ; temporary trap 4
 Int4:	clr	R0
 	rti
+
+
+; clear screen vdata
+ClearScreen:
+	mov	#177010, R4
+	mov	#177012, R3
+	mov	#177014, R5
+	mov	#100000, (R4)
+	mov	#100000, R0
+10$:	clr	(R5)
+	clr	(R3)
+	inc	(R4)
+	sob	R0, 10$
+	return
 
 
 ; setup lines table
@@ -876,11 +883,12 @@ SoundTable:	.word	0, Snd001-., Snd002-.
 .radix 10
 
 ; 'step' sound
-Snd001:	.word	50, 0
+Snd001:	.word	030, 030
+	.word	0
 
 ; guard was hit 
-Snd002:	.word	194, 79, 37, 26, 75, 25, 210
-	.word	41, 37, 76, 26, 52
+Snd002:	.word	194, 079, 037, 026, 075, 025, 210, 041
+	.word	037, 076, 026, 052
 	.word	0
 
 .radix 8 
