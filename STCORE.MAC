@@ -5026,7 +5026,7 @@ L15506:	MOV	#000372, R1		; 250.
 L15646:	.WORD	0	; RMTIME
 
 ; sound procedure
-L15650:	return
+L15650:	jmp	Sound2
 
 
 ; Computerized font, 59 chars 8x8
