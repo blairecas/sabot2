@@ -42,6 +42,7 @@ C_PPU_PLAY	=: 6			; play one frame of music
 C_PPU_MUTE	=: 7			; mute music
 C_PPU_SOUND1	=: 8.			; 'step' sound
 C_PPU_SOUND2	=: 9.			; 'guard was hit' sound
+C_PPU_SOUND3	=: 10.			; 'console use' sound
 
 
 	.asect
@@ -282,6 +283,7 @@ Main:	call	DrawTiles			;
 	jmp	MuteMusic			; 7
 	jmp	Sound1				; 8.
 	jmp	Sound2				; 9.
+	jmp	Sound3				; 10.
 	; ...
 
 Exit:	mtps	#200
@@ -814,14 +816,19 @@ MuteMusic:
 ; //////////////////////////////////////////////////////////////////////////////
 
 ; 'step' sound
-Sound1:	mov	#1, R0
-	br	PlaySound
+Sound1:	bis	#200, @#177716
+	mov	#10., R0
+	sob	R0, .
+	bic	#200, @#177716
+	jmp	Done
 
-
-; 
+; guard was hit
 Sound2:	mov	#2, R0
 	br	PlaySound
 
+; console use
+Sound3:	mov	#3, R0
+	br	PlaySound
 
 SoundAddr:	.word	0
 
@@ -878,7 +885,7 @@ TimerInit:
 	tst	@#177714
 	return
 
-SoundTable:	.word	0, Snd001-., Snd002-.
+SoundTable:	.word	0, Snd001-., Snd002-., Snd003-.
 
 .radix 10
 
@@ -890,6 +897,26 @@ Snd001:	.word	030, 030
 Snd002:	.word	194, 079, 037, 026, 075, 025, 210, 041
 	.word	037, 076, 026, 052
 	.word	0
+
+; console use
+Snd003:	.word	420, 410, 420, 430, 440, 450, 450, 450, 450, 450, 450, 450
+	.word	450, 440, 430, 430, 430, 420, 420, 420
+	.word	4040, 2020
+	.word	230, 232, 234, 236, 238, 240, 238, 236, 236, 236, 236, 236
+	.word	234, 232, 230, 230, 230, 230, 230, 230, 230, 230, 230, 230
+	.word	230, 230, 230, 230, 230, 230, 230, 230, 230, 230, 230, 230
+	.word	230, 232, 232, 234, 235, 235
+	.word	4040, 2030
+	.word	340, 340, 341, 342, 342, 342, 342, 342, 342, 340, 340, 340
+	.word	340, 340, 341, 342, 342, 342, 342, 342, 342, 340, 340, 340
+	.word	340, 340
+	.word	4040, 2040
+	.word	161, 162, 163, 163, 163, 163, 164, 164, 164, 165, 165, 165
+	.word	165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165
+	.word	165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165
+	.word	165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165
+	.word	165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165
+	.word	0 
 
 .radix 8 
 

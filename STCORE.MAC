@@ -27,6 +27,7 @@ C_PPU_PLAY	=: 6			; play one frame of music
 C_PPU_MUTE	=: 7			; mute music
 C_PPU_SOUND1	=: 8.			; 'step' sound
 C_PPU_SOUND2	=: 9.			; 'guard was hit' sound
+C_PPU_SOUND3	=: 10.			; 'console use' sound
 
 
 ; Special comments-warnings in the code:
@@ -720,6 +721,12 @@ Sound2:
 	mov	#C_PPU_SOUND2, PpuComm
 	return
 
+; console use
+SoundConsole:
+	mov	#C_PPU_SOUND3, PpuComm
+	bic	#20, PpuKeys			; remove 'fire' button
+	return
+
 
 ; channel 2 data
 PPmsg:	.word	PPArr
@@ -1033,8 +1040,8 @@ K12514:	MOVB	#060, (R3)+		; <
 	MOVB	R0, <L14534+2>		; set (NRGPX+1) = 1
 
 ; DEBUG:
-;	clrb	Decen+2
-	MOVB	R0, <Decen+2>		; set (DECEN+1) = 1
+	clrb	Decen+2
+;	MOVB	R0, <Decen+2>		; set (DECEN+1) = 1
 
 	MOVB	R0, K33464		; set HELD value = 1 = Shuriken
 	MOVB	R0, K33465		; set NEAR value = 1
@@ -1115,10 +1122,10 @@ K13346:	BIC	#177400, R0
 	MOV	K72572(R0), R3		; Get room sequence addr from the table
 ; NXRUT: Build the room using the room sequence
 K13360:	MOVB	(R3), R0		; get marker
-	INCB	R0			; end of sequence?
-	BNE	K13372
+	INCB	R0			; 377? end of sequence?
+	BNE	10$
 	JMP	K24272			; => RMDUN End of room sequence
-K13372:	INC	R3
+10$:	INC	R3
 	PUSH	R3
 	ASL	R0			; *2
 	BIC	#177400, R0
@@ -1167,7 +1174,7 @@ K13426:	.WORD	K20120		; $00 000 - HORLN - Fill horizontally W with tile
 	.WORD	K20230		; $21 041 - GRLAD
 	.WORD	K17640		; $22 042 - LETR1
 	.WORD	K17646		; $23 043 - LETR2
-	.WORD	K17654		; $24 044 - LETR3
+	.WORD	K17654		; $24 044 - LETR3 - plorer
 	.WORD	K16656		; $25 045 - BOX1P
 	.WORD	K16742		; $26 046 - FDESK
 	.WORD	K16500		; $27 047 - DOORP
@@ -1454,8 +1461,10 @@ K15662:	.BYTE	370,370,370,321,321,000
 K15670:	MOV	#K15716, R4		; copy from
 	MOVB	#002, K01604		; width = 2
 	MOV	#000003, R1		; height = 3
-	MOV	#062600, R3		; BUFFB+309.
+	; fix +1 by X
+	MOV	#062601, R3		; BUFFB+309.
 	JMP	K16432			; Copy tiles
+
 ; Rocket wing element right bottom, 2x3 tiles
 K15716:	.BYTE	370,370,320,370,000,320
 ;
@@ -3986,7 +3995,9 @@ K50446:	BIT	#000002, R0		; bit 1 left ?
 	BEQ	K50514			; 0 => CRRT
 	CALL	K50572			; SWIMQ
 	MOV	#000002, R1
-	CALL	Decen			; DECEN
+;	CALL	Decen			; DECEN
+	nop
+	nop
 	MOV	#047264, R2		; SWIMC -> (CHARN+1)
 	MOV	#K55644, R3		; SWILP -> (VECTN+1)
 	JMP	K55246			; => SETVC - set vectors
@@ -4264,6 +4275,7 @@ K52212:	call	GetKey
 	BIT	#000020, R0		; bit 4 fire ?
 	BNE	K52230
 	JMP	K53042			; => NFIRE
+
 ; Fire key; Console check
 K52230:	MOVB	050134, R0		; get (MANBF+20.)
 	INCB	R0
@@ -4274,13 +4286,15 @@ K52244:	MOV	K36212, R3		; get MANPS
 	CMPB	(R3), #000212		; == 138. ?
 	BEQ	K52266
 	JMP	K52772			; no => NCONU
+
 ; Console: check for LIFTSWAP or FENSWAP or CODEROP
-K52266:	MOV	<K13332+2>, R3		; get (RM+1)
+K52266:	call	SoundConsole
+	MOV	<K13332+2>, R3		; get (RM+1)
 	CMPB	(R3), #075		; room type == $3D ?
 	BEQ	K52446			; yes => K2DAQ
 	CMPB	(R3), #115		; room type == $4D ?
 	BEQ	K52402			; yes => KODAQ
-	NOP2
+
 ; NSEEC:
 K52312:	MOVB	060610, K01602		; get LFT1
 	MOV	#000356, R0
@@ -4798,6 +4812,7 @@ K55406:	INCB	K01606
 ;
 K55464:	.WORD	6
 ;
+
 ; SWIRP: Swim - Vector for (VECTN+1)
 K55466:	MOVB	K36210, R0		; get MANA
 	CMPB	R0, #000035		; == 29. ?
@@ -4836,18 +4851,16 @@ K55630:	CMPB	K36210, #000375		; MANA == 253. ?
 	BNE	K55642			; no => return
 	INC	R2
 K55642:	RETURN
+
 ; SWILP:
 K55644:	MOVB	K36210, R0		; get MANA
 	CMPB	R0, #000375
 	BNE	K55662
-	JMP	K40012
+	JMP	K40012			; go one room left
 K55662:	CMPB	R0, #000001
-	BPL	K55674
-	BR	K55710
-;
-K55672:	.WORD	016703	;??
-;
-K55674:	SUB	R3, (R4)
+	ble	K55710			; already going out of screen, do not check furtheer
+	nop
+	mov	K36212, R3
 	add	#BuffB+191., R3
 	CMPB	(R3), #000307
 	BHIS	K55720
