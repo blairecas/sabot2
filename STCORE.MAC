@@ -1040,8 +1040,8 @@ K12514:	MOVB	#060, (R3)+		; <
 	MOVB	R0, <L14534+2>		; set (NRGPX+1) = 1
 
 ; DEBUG:
-	clrb	Decen+2
-;	MOVB	R0, <Decen+2>		; set (DECEN+1) = 1
+;	clrb	Decen+2
+	MOVB	R0, <Decen+2>		; set (DECEN+1) = 1
 
 	MOVB	R0, K33464		; set HELD value = 1 = Shuriken
 	MOVB	R0, K33465		; set NEAR value = 1
