@@ -434,46 +434,54 @@ VsyInt:	inc	(PC)+
 VsyCnt:	.word	0
 	; LPT joystick
 	mov	R0, -(SP)
+	mov	R1, -(SP)
+	mov	#237, @#177102
+	mov	@#177101, R1				; A, Start + mask #12
 	mov	#277, @#177102
-	mov	@#177101, R0
+	mov	@#177101, R0				; arrows and B C
 	comb	R0
 	beq	99$					; no joystick at all
 	comb	R0					; joystick sends inverted codes
 	tst	HaveJoy
 	beq	90$
 	; seems we have joystick
-	mov	R1, -(SP)
+	mov	R2, -(SP)
 	mov	@#177010, -(SP)
 	mov	#PpuKeys/2, @#177010
-	mov	@#177014, R1
-	bic	#^B11111, R1
+	mov	@#177014, R2
+	clrb	R2
 	; up
 	bit	#1, R0
 	beq	10$
-	bis	#P_KEY_UP, R1
+	bis	#P_KEY_UP, R2
 10$:	; right
 	bit	#2, R0
 	beq	20$
-	bis	#P_KEY_RIGHT, R1
+	bis	#P_KEY_RIGHT, R2
 20$:	; down
 	bit	#4, R0
 	beq	30$
-	bis	#P_KEY_DOWN, R1
+	bis	#P_KEY_DOWN, R2
 30$:	; left
 	bit	#10, R0
 	beq	40$
-	bis	#P_KEY_LEFT, R1
+	bis	#P_KEY_LEFT, R2
 40$:	; B
 	bit	#40, R0
 	beq	50$
-	bis	#P_KEY_SHIFT, R1
-50$:	; store in keys word (CPU)
-	mov	R1, @#177014
+	bis	#P_KEY_SHIFT, R2
+50$:	; start (it's stop here ^_^)
+	bit	#100, R1
+	beq	60$
+	bis	#P_KEY_STOP, R2
+60$:	; store in keys word (CPU)
+	mov	R2, @#177014
 	mov	(SP)+, @#177010
-	mov	(SP)+, R1
+	mov	(SP)+, R2
 	br	99$
 90$:	mov	R0, HaveJoy
-99$:	mov	(SP)+, R0
+99$:	mov	(SP)+, R1
+	mov	(SP)+, R0
 	rti
 
 
