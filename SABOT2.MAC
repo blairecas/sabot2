@@ -437,6 +437,8 @@ VsyCnt:	.word	0
 	mov	#277, @#177102
 	mov	@#177101, R0
 	comb	R0
+	beq	99$					; no joystick at all
+	comb	R0					; joystick sends inverted codes
 	tst	HaveJoy
 	beq	90$
 	; seems we have joystick
