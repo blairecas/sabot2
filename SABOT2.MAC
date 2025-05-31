@@ -436,8 +436,7 @@ VsyCnt:	.word	0
 	mov	R0, -(SP)
 	mov	#277, @#177102
 	mov	@#177101, R0
-	movb	R0, R0
-	com	R0
+	comb	R0
 	tst	HaveJoy
 	beq	90$
 	; seems we have joystick
