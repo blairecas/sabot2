@@ -27,6 +27,13 @@ C_KEY_DOWN	= 134
 C_KEY_SHIFT	= 105
 C_KEY_STOP	= 4
 
+P_KEY_LEFT	=: 002
+P_KEY_RIGHT	=: 001
+P_KEY_UP	=: 010
+P_KEY_DOWN	=: 004
+P_KEY_SHIFT	=: 020
+P_KEY_STOP	=: 200
+
 TILES_DX	=: 32.
 TILES_DY	=: 18.
 
@@ -231,6 +238,8 @@ SetOther:
 	add	#KeyInt-., R0
 	mov	R0, @#300
 	bis	#100, @#177700			; allow keyboard interrupts
+	; maybe joystick
+	mov	#175, @#177103			; LPT B to output, A,C to input
 	; vsync
 	mov	PC, R0
 	add	#VsyInt-., R0
@@ -312,27 +321,27 @@ KeyInt:	mov	@#177010, -(SP)
 	; key pressed
 	cmp	R0, #C_KEY_LEFT
 	bne	11$
-	bis	#002, @#177014
+	bis	#P_KEY_LEFT, @#177014
 	br	90$
 11$:	cmp	R0, #C_KEY_RIGHT
 	bne	12$
-	bis	#001, @#177014
+	bis	#P_KEY_RIGHT, @#177014
 	br	90$
 12$:	cmp	R0, #C_KEY_UP
 	bne	13$
-	bis	#010, @#177014
+	bis	#P_KEY_UP, @#177014
 	br	90$
 13$:	cmp	R0, #C_KEY_DOWN
 	bne	14$
-	bis	#004, @#177014
+	bis	#P_KEY_DOWN, @#177014
 	br	90$
 14$:	cmp	R0, #C_KEY_SHIFT
 	bne	15$
-	bis	#020, @#177014
+	bis	#P_KEY_SHIFT, @#177014
 	br	90$
 15$:	cmp	R0, #C_KEY_STOP
 	bne	90$
-	bis	#200, @#177014
+	bis	#P_KEY_STOP, @#177014
 	br	90$
 50$:	; key released
 	bic	#^B1111111111110000, R0
@@ -423,6 +432,47 @@ DrawTiles:
 ; vsync int
 VsyInt:	inc	(PC)+
 VsyCnt:	.word	0
+	; LPT joystick
+	mov	R0, -(SP)
+	mov	#277, @#177102
+	mov	@#177101, R0
+	movb	R0, R0
+	com	R0
+	tst	HaveJoy
+	beq	90$
+	; seems we have joystick
+	mov	R1, -(SP)
+	mov	@#177010, -(SP)
+	mov	#PpuKeys/2, @#177010
+	mov	@#177014, R1
+	bic	#^B11111, R1
+	; up
+	bit	#1, R0
+	beq	10$
+	bis	#P_KEY_UP, R1
+10$:	; right
+	bit	#2, R0
+	beq	20$
+	bis	#P_KEY_RIGHT, R1
+20$:	; down
+	bit	#4, R0
+	beq	30$
+	bis	#P_KEY_DOWN, R1
+30$:	; left
+	bit	#10, R0
+	beq	40$
+	bis	#P_KEY_LEFT, R1
+40$:	; B
+	bit	#40, R0
+	beq	50$
+	bis	#P_KEY_SHIFT, R1
+50$:	; store in keys word (CPU)
+	mov	R1, @#177014
+	mov	(SP)+, @#177010
+	mov	(SP)+, R1
+	br	99$
+90$:	mov	R0, HaveJoy
+99$:	mov	(SP)+, R0
 	rti
 
 
@@ -936,6 +986,7 @@ BackClrTbl:	.word	^B0000000000000000, ^B0000000000000000
 TileBufAddr:	.word	0
 TempBuf:	.blkw	8.
 
+HaveJoy:	.word	0
 HaveAY:		.word	177777
 PalAdr:		.word	0
 Pal1:		.word	^B1011101010011000
