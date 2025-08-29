@@ -1,0 +1,51 @@
+C_MAX_RAM	=: 124000
+PpuAddr		=: C_MAX_RAM
+PpuComm		=: C_MAX_RAM+2
+PpuData		=: C_MAX_RAM+4
+PpuKeys		=: C_MAX_RAM+6
+
+C_VADDR		=: 100000
+C_SCRWID	=: 80.
+C_VEMPTY1	=: 286.*C_SCRWID+C_VADDR
+SCRTOP 		=: C_VADDR+4
+
+TILES_DX	=: 32.
+TILES_DY	=: 18.
+TILE_DY		=: 8.
+
+C_EMPTY_FORE	=: 216			; 'empty' foreground tile
+C_TILES_PPU	=: 32.			; tiles buffer size
+C_PORT_AY1	=: 177360		; AY port num
+
+C_PPU_EXIT      =: 177777		; exit PPU code
+C_PPU_INITILE	=: 1			; init tiles draw routine
+C_PPU_PALETTE1	=: 2			; set normal (title) palette
+C_PPU_PALETTE2	=: 3			; set second (game) palette
+C_PPU_MUSIC0	=: 4			; music #0 init
+C_PPU_MUSIC1	=: 5			; music #1 init
+C_PPU_PLAY	=: 6			; play one frame of music
+C_PPU_MUTE	=: 7			; mute music
+C_PPU_SOUND0	=: 8.			; sounds
+C_PPU_SOUND1	=: 9.
+C_PPU_SOUND2	=: 10.
+C_PPU_SOUND3	=: 11.
+C_PPU_SOUND4	=: 12.
+C_PPU_SOUND5	=: 13.
+C_PPU_SOUND6	=: 14.
+C_PPU_SOUND7	=: 15.			; sound 'step'
+
+; keys scancodes
+C_KEY_RIGHT	= 133
+C_KEY_LEFT	= 116
+C_KEY_UP	= 154
+C_KEY_DOWN	= 134
+C_KEY_SHIFT	= 105
+C_KEY_STOP	= 4
+
+; bits in PpuKeys
+P_KEY_UP	=: 001
+P_KEY_RIGHT	=: 002
+P_KEY_DOWN	=: 004
+P_KEY_LEFT	=: 010
+P_KEY_FIRE	=: 060 ; 2 buttons 'fire' (40) and 'key A' (20)
+P_KEY_STOP	=: 200

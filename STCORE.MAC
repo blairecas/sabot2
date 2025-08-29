@@ -1,72 +1,32 @@
 	.title	STCORE
-	.enabl	LC,AMA
+	.enabl	LC, AMA ; (!) AMA is needed (!)
 
-C_MAX_RAM	=: 124000
-PpuAddr		=: C_MAX_RAM
-PpuComm		=: C_MAX_RAM+2
-PpuData		=: C_MAX_RAM+4
-PpuKeys		=: C_MAX_RAM+6
+	.asect
+	.=1000
 
-C_VADDR		=: 100000
-C_SCRWID	=: 80.
-C_VEMPTY1	=: 286.*C_SCRWID+C_VADDR
-
-SCREEN 		=: C_VADDR
-SCRTOP 		=: SCREEN+4
-
-TILES_DX	=: 32.
-TILES_DY	=: 18.
-
-C_EMPTY_FORE	=: 216			; 'empty' foreground tile
-
-C_TILES_PPU	=: 32.
-
-C_PPU_EXIT      =: 177777		; exit PPU code
-C_PPU_INITILE	=: 1			; init tiles draw routine
-C_PPU_PALETTE1	=: 2			; set normal (title) palette
-C_PPU_PALETTE2	=: 3			; set second (game) palette
-C_PPU_MUSIC0	=: 4			; music #0 init
-C_PPU_MUSIC1	=: 5			; music #1 init
-C_PPU_PLAY	=: 6			; play one frame of music
-C_PPU_MUTE	=: 7			; mute music
-C_PPU_SOUND0	=: 8.
-C_PPU_SOUND1	=: 9.
-C_PPU_SOUND2	=: 10.
-C_PPU_SOUND3	=: 11.
-C_PPU_SOUND4	=: 12.
-C_PPU_SOUND5	=: 13.
-C_PPU_SOUND6	=: 14.
-C_PPU_SOUND7	=: 15.
-
-P_KEY_UP	=: 001
-P_KEY_RIGHT	=: 002
-P_KEY_DOWN	=: 004
-P_KEY_LEFT	=: 010
-P_KEY_FIRE	=: 060 ; 2 buttons 'fire' (40) and 'key A' (20)
+@include common.mac
 
 C_TAPES_NEEDED  =: 10.
-C_NORMAL_ENERGY =: 0
+C_NORMAL_ENERGY =: 1
 
 ; Special comments-warnings in the code:
 ; !!MUT-CMD!! - the command mutable, means other code changes it
 ; !!MUT-ARG!! - the command argument is mutable
 ; !!MUT-2ndARG!! - the command 2nd argument is mutable
 
-.MACRO	PUSH	RR
-	MOV	RR, -(SP)
-.ENDM
-.MACRO	POP	RR
-	MOV	(SP)+, RR
-.ENDM
+	.macro	push	RR
+	mov	RR, -(SP)
+	.endm
 
-.macro	.ppexe	X
+	.macro	pop	RR
+	mov	(SP)+, RR
+	.endm
+
+	.macro	.ppexe	X
 	mov	X, @#PpuComm
 	tst	@#PpuComm
 	bne	.-4
-.endm
-
-	.asect
-	.=1000
+	.endm
 
 Start:	mtps	#200
 	; prepare mirroring table
@@ -87,7 +47,6 @@ Start:	mtps	#200
 ; // Data
 ; //////////////////////////////////////////////////////////////////////////////
 
-NowPlaying:	.word	0
 FramesCount:	.word	0
 
 RocketLaunched:	.word	0
@@ -545,7 +504,7 @@ TBufBgr:
 ;	; check if we need to go further - some tiles are counted as foreground
 	cmp	R2, #361
 	blo	TBufGuard1
-	jmp	TBufOut
+	jmp	TBufFore
 
 
 ; guard 1
@@ -661,14 +620,15 @@ TOvClr:	.word	0
 
 ; print string on background tiles buffer, R2 - string, R1 - length, R3 - buf addr 
 PrintOnBgr:
-	mov	R1, R5
+	mov	R1, -(SP)
 10$:	movb	(R2)+, R0
 	add	#244, R0			; 228.-64.
 	movb	R0, (R3)+
 	sob	R1, 10$
 	sub	#2200, R3			; BUFFO-BUFFD (go to 'were changes' buffer)
+	mov	(SP)+, R1
 20$:	incb	-(R3)				; mark tile as 'was changed'
-	sob	R5, 20$
+	sob	R1, 20$
 	return
 
 
@@ -981,6 +941,9 @@ K55464:	.word	6				; temp vars in drawing
 K50062:	.word	6
 
 
+; //////////////////////////////////////////////////////////////////////////////
+; // PPU exch
+; //////////////////////////////////////////////////////////////////////////////
 
 ; channel 2 data
 PPmsg:	.word	PPArr
@@ -1009,6 +972,80 @@ PpuRelease:
 
 
 ; //////////////////////////////////////////////////////////////////////////////
+; // Panel draw
+; //////////////////////////////////////////////////////////////////////////////
+
+DrawPanel:
+	mov	#176640, R4
+	mov	#176642, R5
+	mov	#144.*C_SCRWID+SCRTOP, (R4)
+	mov	#PanelTiles, R0
+	mov	#6., R3
+10$:	mov	#32., R2
+20$:	movb	(R0)+, R1
+	call	DrawPanelTile
+	sob	R2, 20$
+	add	#C_SCRWID*8.-32., (R4)
+	sob	R3, 10$
+	return
+	
+; draw one tile, R1 = #, (R4) - vaddr
+DrawPanelTile:
+	mul	#16., R1
+	add	#PanelTile000, R1
+	.rept	8.
+	mov	(R1)+, (R5)
+	add	#C_SCRWID, (R4)
+	.endr
+	sub	#C_SCRWID*8.-1, (R4)
+	return
+
+PanelTiles:
+	.byte	0, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 3
+	.byte	4, 5, 5, 5, 5, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4, 6, 7, 7, 7, 10, 4, 5, 5, 5, 5, 4
+	.byte	4, 5, 5, 5, 5, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4, 11, 5, 5, 5, 12, 4, 5, 5, 5, 5, 4
+	.byte	4, 5, 5, 5, 5, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4, 13, 14, 14, 14, 15, 4, 5, 5, 5, 5, 4
+	.byte	4, 5, 5, 5, 5, 4, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 4, 5, 5, 5, 5, 5, 4, 5, 5, 5, 5, 4
+	.byte	16, 1, 1, 1, 1, 17, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 17, 1, 1, 1, 1, 1, 17, 1, 1, 1, 1, 20
+	.even	
+
+PanelTile000:
+	.word	0, 44110, 130260, 155733, 46114, 112224, 22044, 2004
+PanelTile001:
+	.word	0, 102204, 42104, 57537, 164350, 44110, 42104, 0
+PanelTile002:
+	.word	0, 42104, 22044, 161342, 31463, 53126, 44511, 4010
+PanelTile003:
+	.word	0, 6014, 1002, 61142, 11423, 6415, 74571, 12024
+PanelTile004:
+	.word	4010, 76174, 11022, 10020, 4010, 37076, 44110, 6014
+PanelTile005:
+	.word	0, 0, 0, 0, 0, 0, 0, 0
+PanelTile006:
+	.word	0, 170000, 4000, 162000, 11000, 5000, 5000, 5000
+PanelTile007:
+	.word	0, 177400, 0, 177400, 0, 0, 0, 0
+PanelTile008:
+	.word	0, 7400, 10000, 23400, 44000, 50000, 50000, 50000
+PanelTile009:
+	.word	5000, 5000, 5000, 5000, 5000, 5000, 5000, 5000
+PanelTile010:
+	.word	50000, 50000, 50000, 50000, 50000, 50000, 50000, 50000
+PanelTile011:
+	.word	5000, 5000, 5000, 11000, 162000, 4000, 170000, 0
+PanelTile012:
+	.word	0, 0, 0, 0, 177400, 0, 177400, 0
+PanelTile013:
+	.word	50000, 50000, 50000, 44000, 23400, 10000, 7400, 0
+PanelTile014:
+	.word	4010, 114230, 107617, 146314, 172364, 41102, 41102, 20040
+PanelTile015:
+	.word	4010, 125252, 135272, 152324, 43507, 42104, 21042, 0
+PanelTile016:
+	.word	74170, 12024, 14431, 15433, 23046, 21042, 42104, 2004
+
+
+; //////////////////////////////////////////////////////////////////////////////
 ; // Rocket Launch
 ; //////////////////////////////////////////////////////////////////////////////
 
@@ -1023,6 +1060,7 @@ RocketLaunch:
 CoreStart:	
 	; reset 
 	mov	#1000, SP
+
 	; title screen
 	clr	FpsOut				; disable showing FPS
 	.ppexe	#C_PPU_PALETTE1			; show title screen
@@ -1039,9 +1077,11 @@ CoreStart:
 	clr	PpuKeys
 	.ppexe	#C_PPU_MUTE			; mute music
 	.ppexe	#C_PPU_PALETTE2
+
 	; STOP was pressed?
 	bit	#200, R0
 	beq	AfterTitle
+
 	; exit to RT-11 or whatever..
 	mtps	#200
 	.ppexe	#C_PPU_EXIT			; ask PPU to exit
@@ -1085,6 +1125,7 @@ AfterTitle:
 	SOB	R1, 40$
 
 	; show panel
+	call	DrawPanel
 
 	; print strings on panel
 	mov	#StrHeld, R3			; HELD/NEAR/etc..
@@ -1897,9 +1938,41 @@ K17166:	MOVB	#132, K37662			; set SPEED = 90.
 K17200:	.BYTE	0, 0				; BIKER
 K17202:	.WORD	0				; BIKPS
 
-;
-@include S21E80.MAC
-;
+; BIKEC 11x5 tiles
+K17204:	.BYTE	377,377,142,143,377,377,377,377,377,377,377
+	.BYTE	377,144,145,202,203,204,205,146,377,377,377
+	.BYTE	147,150,151,152,206,207,155,156,157,377,377
+	.BYTE	160,161,162,163,210,165,166,167,170,377,377
+	.BYTE	171,172,173,174,175,176,177,200,201,377,377
+
+; BIKMC - bike moving
+K17273:	.BYTE	377,377,142,143,216,216,377,377,377,377,377
+	.BYTE	377,144,145,216,216,377,377,146,216,216,377
+	.BYTE	147,150,151,152,153,154,155,156,157,216,216
+	.BYTE	160,161,162,163,164,165,166,167,170,216,216
+	.BYTE	171,172,173,174,175,176,177,200,201,216,216
+
+; FDESC 6x4 tiles
+K17362:	.BYTE	042,043,044,044,045,046
+	.BYTE	047,050,377,377,047,050
+	.BYTE	047,050,377,377,047,050
+	.BYTE	214,377,377,377,377,215
+; BOX1C 11x7 tiles
+K17412:	.BYTE	002,003,004,377,377,377,377,377,377,377,377
+	.BYTE	005,006,007,377,377,377,002,003,003,004,377
+	.BYTE	010,011,012,377,377,377,005,006,006,007,377
+	.BYTE	002,003,003,003,004,377,010,011,011,012,377
+	.BYTE	005,006,006,006,002,003,004,377,002,003,004
+	.BYTE	005,006,006,006,005,006,007,377,005,006,007
+	.BYTE	010,011,011,011,010,011,012,377,010,011,012
+; BOX4C 10x7 tiles
+K17527:	.BYTE	377,377,377,377,002,003,003,004,377,377
+	.BYTE	377,377,377,377,005,006,006,007,377,377
+	.BYTE	377,377,377,377,010,011,011,012,377,377
+	.BYTE	377,377,002,003,003,004,377,002,003,004
+	.BYTE	002,003,004,006,006,007,377,005,006,007
+	.BYTE	005,006,007,006,006,007,377,005,006,007
+	.BYTE	010,011,012,011,011,012,377,010,011,012
 
 K17635:	.BYTE	000				; LETNO
 	.BYTE	000,000
@@ -2344,12 +2417,6 @@ K24762:	.BYTE	000, 000			; DEFGH
 
 ; NXMAN:
 MainCycle:
-	; wait some if we are too fast
-	; at last, I'm putting wait in a game ^)
-	cmp	VsyGme, #4
-	blo	.-6
-	clr	VsyGme
-
 	call	ClearBuffNina			; BUFCL Fill Ninja tile screen
 
 	; flamethrower tiles update (stop after use once)
@@ -3433,6 +3500,12 @@ DoPic1:
 ; //////////////////////////////////////////////////////////////////////////////
 ; // MainCycle ends 
 ; //////////////////////////////////////////////////////////////////////////////
+
+	; wait some if we are too fast
+	; at last, I'm putting wait in a game ^)
+	cmp	VsyGme, #4
+	blo	.-6
+	clr	VsyGme
 
 	CALL	DrawScreen			; DOPIC - Show the room on the screen
 

@@ -3,64 +3,10 @@
 	.list	MEB
 	.enabl	LC
 
-; CPU RAM addrs
-C_MAX_RAM	=: 124000
-PpuAddr		=: C_MAX_RAM
-PpuComm		=: C_MAX_RAM+2
-PpuData		=: C_MAX_RAM+4
-PpuKeys		=: C_MAX_RAM+6
-
-; PPU Misc
-C_VADDR		=: 100000
-C_SCRWID	=: 80.
-C_VEMPTY1	=: 286.*C_SCRWID+C_VADDR
-C_PORT_AY1	=: 177360
-
-SCREEN 		=: C_VADDR
-SCRTOP 		=: SCREEN+4
-
-; keys scancodes
-C_KEY_RIGHT	= 133
-C_KEY_LEFT	= 116
-C_KEY_UP	= 154
-C_KEY_DOWN	= 134
-C_KEY_SHIFT	= 105
-C_KEY_STOP	= 4
-
-TILES_DX	=: 32.
-TILES_DY	=: 18.
-
-TILE_DY		=: 8.
-
-C_TILES_PPU	=: 32.			; tiles buffer size to draw
-
-C_PPU_EXIT      =: 177777		; exit PPU code
-C_PPU_INITILE	=: 1			; init tiles draw routine
-C_PPU_PALETTE1	=: 2			; set normal (title) palette
-C_PPU_PALETTE2	=: 3			; set second (game) palette
-C_PPU_MUSIC0	=: 4			; music #0 init
-C_PPU_MUSIC1	=: 5			; music #1 init
-C_PPU_PLAY	=: 6			; play one frame of music
-C_PPU_MUTE	=: 7			; mute music
-C_PPU_SOUND0	=: 8.
-C_PPU_SOUND1	=: 9.
-C_PPU_SOUND2	=: 10.
-C_PPU_SOUND3	=: 11.
-C_PPU_SOUND4	=: 12.
-C_PPU_SOUND5	=: 13.
-C_PPU_SOUND6	=: 14.
-C_PPU_SOUND7	=: 15.
-
-P_KEY_UP	=: 001
-P_KEY_RIGHT	=: 002
-P_KEY_DOWN	=: 004
-P_KEY_LEFT	=: 010
-P_KEY_FIRE	=: 060 ; 2 buttons 'fire' (40) and 'key A' (20)
-P_KEY_STOP	=: 200
-
-
 	.asect
 	.=1000
+
+@include common.mac
 
 Start:	mtps	#200				; stop right there, you interrupts
 	mov	#1000, SP			; just in case
@@ -91,7 +37,7 @@ Start:	mtps	#200				; stop right there, you interrupts
 	; unpack and run CPU
 	jmp	@#C_MAX_RAM-UnpackEnd+UnpackRun	
 
-MsgMem:	.asciz	"(!) unable to get memory (135000)"
+MsgMem:	.asciz	"(!) unable to get memory (124000)"
 	.even
 
 ; //////////////////////////////////////////////////////////////////////////////
@@ -982,15 +928,23 @@ Snd003:	.word	11, 18, 56, 89, 05, 06
 	.word	0
 
 ; switch console
-Snd004:	.word	120, 122, 124, 124, 122, 120, 122, 124, 124, 122, 122, 120
-	.word	120, 122, 124, 124, 122, 120
-	.word	080, 082, 081, 082, 082, 082, 082, 082, 082, 080, 080, 090
-	.word	080, 082, 081, 082, 082, 082, 082, 082, 082, 080, 080, 090
-	.word	080, 082, 081, 082, 082, 082, 082, 082, 082, 080, 080, 090
-	.word	020, 025, 024, 023, 021, 020, 025, 024, 023, 022, 021, 020
-	.word	020, 025, 024, 023, 021, 020, 025, 024, 023, 022, 021, 020
-	.word	020, 025, 024, 023, 021, 020, 025, 024, 023, 022, 021, 020
-	.word	020, 025, 024, 023, 021, 020, 025, 024, 023, 022, 021, 020
+Snd004:	.word	60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60, 60
+	.word	60, 60, 60, 60, 60, 60, 60, 60
+	.word	540, 250
+	.word	25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25
+	.word	25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25
+	.word	25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25, 25
+	.word	25, 25, 25, 25, 25, 25
+	.word	540, 230
+	.word	45, 46, 47, 48, 49, 48, 47, 46, 45, 44, 45, 46
+	.word	45, 46, 47, 48, 49, 48, 47, 46, 45, 44, 45, 46
+	.word	45, 46
+	.word	540, 240
+	.word	21, 22, 23, 24, 25, 24, 23, 22, 21, 20, 21, 20
+	.word	21, 22, 23, 24, 25, 24, 23, 22, 21, 20, 21, 20
+	.word	21, 22, 23, 24, 25, 24, 23, 22, 21, 20, 21, 20
+	.word	21, 22, 23, 24, 25, 24, 23, 22, 21, 20, 21, 20
+	.word	21, 22, 23, 24, 25, 24, 23, 22, 21, 20, 21, 20
 	.word	0
 
 ; dagger or bat hit (they are all missiles)
