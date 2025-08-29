@@ -27,17 +27,12 @@ C_KEY_DOWN	= 134
 C_KEY_SHIFT	= 105
 C_KEY_STOP	= 4
 
-P_KEY_LEFT	=: 002
-P_KEY_RIGHT	=: 001
-P_KEY_UP	=: 010
-P_KEY_DOWN	=: 004
-P_KEY_SHIFT	=: 020
-P_KEY_STOP	=: 200
-
 TILES_DX	=: 32.
 TILES_DY	=: 18.
 
 TILE_DY		=: 8.
+
+C_TILES_PPU	=: 32.			; tiles buffer size to draw
 
 C_PPU_EXIT      =: 177777		; exit PPU code
 C_PPU_INITILE	=: 1			; init tiles draw routine
@@ -47,9 +42,21 @@ C_PPU_MUSIC0	=: 4			; music #0 init
 C_PPU_MUSIC1	=: 5			; music #1 init
 C_PPU_PLAY	=: 6			; play one frame of music
 C_PPU_MUTE	=: 7			; mute music
-C_PPU_SOUND1	=: 8.			; 'step' sound
-C_PPU_SOUND2	=: 9.			; 'guard was hit' sound
-C_PPU_SOUND3	=: 10.			; 'console use' sound
+C_PPU_SOUND0	=: 8.
+C_PPU_SOUND1	=: 9.
+C_PPU_SOUND2	=: 10.
+C_PPU_SOUND3	=: 11.
+C_PPU_SOUND4	=: 12.
+C_PPU_SOUND5	=: 13.
+C_PPU_SOUND6	=: 14.
+C_PPU_SOUND7	=: 15.
+
+P_KEY_UP	=: 001
+P_KEY_RIGHT	=: 002
+P_KEY_DOWN	=: 004
+P_KEY_LEFT	=: 010
+P_KEY_FIRE	=: 060 ; 2 buttons 'fire' (40) and 'key A' (20)
+P_KEY_STOP	=: 200
 
 
 	.asect
@@ -290,9 +297,14 @@ Main:	call	DrawTiles			;
 	jmp	InitMusic1			; 5
 	jmp	PlayMusic			; 6
 	jmp	MuteMusic			; 7
-	jmp	Sound1				; 8.
-	jmp	Sound2				; 9.
-	jmp	Sound3				; 10.
+	jmp	Sound0				; 8.
+	jmp	Sound1				; 9.
+	jmp	Sound2				; 10.
+	jmp	Sound3				; 11.
+	jmp	Sound4				; 12.
+	jmp	Sound5				; 13.
+	jmp	Sound6				; 14.
+	jmp	Sound7				; 15.
 	; ...
 
 Exit:	mtps	#200
@@ -337,7 +349,7 @@ KeyInt:	mov	@#177010, -(SP)
 	br	90$
 14$:	cmp	R0, #C_KEY_SHIFT
 	bne	15$
-	bis	#P_KEY_SHIFT, @#177014
+	bis	#P_KEY_FIRE, @#177014
 	br	90$
 15$:	cmp	R0, #C_KEY_STOP
 	bne	90$
@@ -347,19 +359,19 @@ KeyInt:	mov	@#177010, -(SP)
 	bic	#^B1111111111110000, R0
 	cmp	R0, #^B1110			; left
 	bne	51$
-	bic	#002, @#177014
+	bic	#P_KEY_LEFT, @#177014
 	br	90$
 51$:	cmp	R0, #^B1011			; right
 	bne	52$
-	bic	#001, @#177014
+	bic	#P_KEY_RIGHT, @#177014
 	br	90$
 52$:	cmp	R0, #^B1100			; up down
 	bne	53$
-	bic	#014, @#177014
+	bic	#P_KEY_UP+P_KEY_DOWN, @#177014
 	br	90$
 53$:	cmp	R0, #^B0101			; shift
 	bne	90$
-	bic	#020, @#177014	
+	bic	#P_KEY_FIRE, @#177014	
 90$:	; exit int
 	mov	(SP)+, R0
 	mov	(SP)+, @#177010
@@ -383,7 +395,7 @@ DrawTiles:
 	mov	#177010, R4			; mem index
 	mov	#177014, R5			; mem data
 	mov	#177024, R3			; pix data
-	mov	#16., 91$+2			; 16. tiles max
+	mov	#C_TILES_PPU, 91$+2		; tiles max
 10$:	; tiles cycle
 	mov	2(SP), (R4)			; tile buf addr in CPU/2
 	mov	(R5), R1			; check screen index
@@ -469,7 +481,7 @@ VsyCnt:	.word	0
 40$:	; B
 	bit	#40, R0
 	beq	50$
-	bis	#P_KEY_SHIFT, R2
+	bis	#P_KEY_FIRE, R2
 50$:	; start (it's stop here ^_^)
 	bit	#100, R1
 	beq	60$
@@ -874,26 +886,33 @@ MuteMusic:
 ; // Sound
 ; //////////////////////////////////////////////////////////////////////////////
 
-; 'step' sound
-Sound1:	bis	#200, @#177716
+Sound0:	mov	#0, R0
+	br	PlaySound
+Sound1:	mov	#1, R0
+	br	PlaySound
+Sound2:	mov	#2, R0
+	br	PlaySound
+Sound3:	mov	#3, R0
+	br	PlaySound
+Sound4:	mov	#4, R0
+	br	PlaySound
+Sound5:	mov	#5, R0
+	br	PlaySound
+Sound6:	mov	#6, R0
+	br	PlaySound
+Sound7:	bis	#200, @#177716
 	mov	#10., R0
 	sob	R0, .
 	bic	#200, @#177716
 	jmp	Done
-
-; guard was hit
-Sound2:	mov	#2, R0
-	br	PlaySound
-
-; console use
-Sound3:	mov	#3, R0
-	br	PlaySound
 
 SoundAddr:	.word	0
 
 ; start sound
 ; R0 - sound #
 PlaySound:
+	jmp	Done
+
 	call	TimerInit
 	asl	R0				; to word
 	add	PC, R0
@@ -901,7 +920,7 @@ PlaySound:
 	add	(R0), R0
 	beq	99$
 	clr	R1
-	mov	(R0)+, R1
+	bisb	(R0)+, R1
 	beq	99$
 	mov	R0, SoundAddr
 	mov	R1, @#177712			; load counter
@@ -925,9 +944,9 @@ SoundIntHi:
 	mov	PC, @#304
 	add	#SoundIntLo+2-., @#304
 SoundIntNext:
-	mov	@SoundAddr, @#177712		; update timer
+	movb	@SoundAddr, @#177712		; update timer
 	beq	90$				; end of sound?
-	add	#2, SoundAddr
+	inc	SoundAddr
 	tst	@#177714
 	tst	@#177714
 	rti
@@ -944,38 +963,50 @@ TimerInit:
 	tst	@#177714
 	return
 
-SoundTable:	.word	0, Snd001-., Snd002-., Snd003-.
+SoundTable:	.word	Snd000-., Snd001-., Snd002-., Snd003-., Snd004-., Snd005-., Snd006-.
 
 .radix 10
 
-; 'step' sound
-Snd001:	.word	030, 030
-	.word	0
+; cat paw
+Snd000:	.byte	10, 10, 14, 14, 22, 22, 26, 26, 32, 32, 36, 36, 40, 40, 44, 44 ; , 48, 48, 52, 52
+	.byte	0
 
-; guard was hit 
-Snd002:	.word	194, 079, 037, 026, 075, 025, 210, 041
-	.word	037, 076, 026, 052
-	.word	0
+; guard kick
+Snd001:	.byte	21, 15, 46, 29, 16, 11, 22, 21, 38, 26
+	.byte	110, 135, 93, 42, 32, 126, 86, 70
+	.byte	0
 
-; console use
-Snd003:	.word	420, 410, 420, 430, 440, 450, 450, 450, 450, 450, 450, 450
-	.word	450, 440, 430, 430, 430, 420, 420, 420
-	.word	4040, 2020
-	.word	230, 232, 234, 236, 238, 240, 238, 236, 236, 236, 236, 236
-	.word	234, 232, 230, 230, 230, 230, 230, 230, 230, 230, 230, 230
-	.word	230, 230, 230, 230, 230, 230, 230, 230, 230, 230, 230, 230
-	.word	230, 232, 232, 234, 235, 235
-	.word	4040, 2030
-	.word	340, 340, 341, 342, 342, 342, 342, 342, 342, 340, 340, 340
-	.word	340, 340, 341, 342, 342, 342, 342, 342, 342, 340, 340, 340
-	.word	340, 340
-	.word	4040, 2040
-	.word	161, 162, 163, 163, 163, 163, 164, 164, 164, 165, 165, 165
-	.word	165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165
-	.word	165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165
-	.word	165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165
-	.word	165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165, 165
-	.word	0 
+; guard punch
+Snd002:	.byte	20,10, 30,10, 40,10
+	.byte	0
+
+; drop on floor
+Snd003:	.byte	11, 18, 56, 89, 05, 06
+	.byte	0
+
+; switch console
+Snd004:	.byte	020, 025, 024, 023, 021, 020, 025, 024, 023, 022, 021, 020
+	.byte	020, 025, 024, 023, 021, 020, 025, 024, 023, 022, 021, 020
+	.byte	025, 024, 023, 022
+	.byte	080, 082, 081, 082, 082, 082, 082, 082, 082, 080, 080, 090
+	.byte	080, 082, 081, 082, 082, 082, 082, 080
+	.byte	120, 122, 124, 124, 122, 120, 122, 124, 124, 122, 122, 120
+	.byte	120, 122, 124
+	.byte	020, 025, 024, 023, 021, 020, 025, 024, 023, 022, 021, 020
+	.byte	020, 025, 024, 023, 021, 020, 025, 024, 023, 022, 021, 020
+	.byte	025, 024, 023, 022
+	.byte	0
+
+; dagger or bat hit (they are all missiles)
+Snd005:	.byte	30,30, 30,30, 20,20
+	.byte	0
+
+; guard hit by Nina
+Snd006:	.byte	21, 15, 27, 15, 46, 29, 16, 11, 22, 21, 38, 26, 36, 27, 30, 10
+	.byte	188, 235, 143, 109, 54, 52, 52, 196, 116, 120, 136, 163
+	.byte	0
+
+	.even
 
 .radix 8 
 

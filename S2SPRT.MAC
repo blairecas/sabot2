@@ -429,9 +429,3 @@ BackTiles:
 	.byte	001, 377, 000, 377, 377, 377, 377, 377, 170, 0 ; 375
 	.byte	266, 377, 377, 377, 315, 011, 040, 002, 004, 0 ; 376 
 
-; was compressed ninja picture for menu
-	.blkb	1514
-; 106234
-MARKF1:
-
-; END OF S2SPRT.MAC
