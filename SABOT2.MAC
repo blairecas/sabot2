@@ -911,16 +911,13 @@ SoundAddr:	.word	0
 ; start sound
 ; R0 - sound #
 PlaySound:
-	jmp	Done
-
 	call	TimerInit
 	asl	R0				; to word
 	add	PC, R0
 	add	#SoundTable-., R0
 	add	(R0), R0
 	beq	99$
-	clr	R1
-	bisb	(R0)+, R1
+	mov	(R0)+, R1
 	beq	99$
 	mov	R0, SoundAddr
 	mov	R1, @#177712			; load counter
@@ -929,7 +926,7 @@ PlaySound:
 	bic	#200, @#177716			; sound to LO
 	mov	PC, @#304
 	add	#SoundIntHi+2-., @#304		; set sound interrupt to HI
-	mov	#^B01000001, @#177710		; allow int, start, timer = 4 mks
+	mov	#^B01000111, @#177710		; allow int, start, timer = (..FFS) FF = 00 - 2mks, 01 - 4mks, 10 - 8mks, 11 - 16mks
 99$:	jmp	Done
 
 ; sound timer interrupt (LO)
@@ -944,9 +941,9 @@ SoundIntHi:
 	mov	PC, @#304
 	add	#SoundIntLo+2-., @#304
 SoundIntNext:
-	movb	@SoundAddr, @#177712		; update timer
+	mov	@SoundAddr, @#177712		; update timer
 	beq	90$				; end of sound?
-	inc	SoundAddr
+	add	#2, SoundAddr
 	tst	@#177714
 	tst	@#177714
 	rti
@@ -968,45 +965,42 @@ SoundTable:	.word	Snd000-., Snd001-., Snd002-., Snd003-., Snd004-., Snd005-., Sn
 .radix 10
 
 ; cat paw
-Snd000:	.byte	10, 10, 14, 14, 22, 22, 26, 26, 32, 32, 36, 36, 40, 40, 44, 44 ; , 48, 48, 52, 52
-	.byte	0
+Snd000:	.word	10, 10, 14, 14, 22, 22, 26, 26, 32, 32, 36, 36, 40, 40, 44, 44 ; , 48, 48, 52, 52
+	.word	0
 
 ; guard kick
-Snd001:	.byte	21, 15, 46, 29, 16, 11, 22, 21, 38, 26
-	.byte	110, 135, 93, 42, 32, 126, 86, 70
-	.byte	0
+Snd001:	.word	21, 15, 46, 29, 16, 11, 22, 21, 38, 26
+	.word	110, 135, 93, 42, 32, 126, 86, 70
+	.word	0
 
 ; guard punch
-Snd002:	.byte	20,10, 30,10, 40,10
-	.byte	0
+Snd002:	.word	20,10, 30,10, 40,10
+	.word	0
 
 ; drop on floor
-Snd003:	.byte	11, 18, 56, 89, 05, 06
-	.byte	0
+Snd003:	.word	11, 18, 56, 89, 05, 06
+	.word	0
 
 ; switch console
-Snd004:	.byte	020, 025, 024, 023, 021, 020, 025, 024, 023, 022, 021, 020
-	.byte	020, 025, 024, 023, 021, 020, 025, 024, 023, 022, 021, 020
-	.byte	025, 024, 023, 022
-	.byte	080, 082, 081, 082, 082, 082, 082, 082, 082, 080, 080, 090
-	.byte	080, 082, 081, 082, 082, 082, 082, 080
-	.byte	120, 122, 124, 124, 122, 120, 122, 124, 124, 122, 122, 120
-	.byte	120, 122, 124
-	.byte	020, 025, 024, 023, 021, 020, 025, 024, 023, 022, 021, 020
-	.byte	020, 025, 024, 023, 021, 020, 025, 024, 023, 022, 021, 020
-	.byte	025, 024, 023, 022
-	.byte	0
+Snd004:	.word	120, 122, 124, 124, 122, 120, 122, 124, 124, 122, 122, 120
+	.word	120, 122, 124, 124, 122, 120
+	.word	080, 082, 081, 082, 082, 082, 082, 082, 082, 080, 080, 090
+	.word	080, 082, 081, 082, 082, 082, 082, 082, 082, 080, 080, 090
+	.word	080, 082, 081, 082, 082, 082, 082, 082, 082, 080, 080, 090
+	.word	020, 025, 024, 023, 021, 020, 025, 024, 023, 022, 021, 020
+	.word	020, 025, 024, 023, 021, 020, 025, 024, 023, 022, 021, 020
+	.word	020, 025, 024, 023, 021, 020, 025, 024, 023, 022, 021, 020
+	.word	020, 025, 024, 023, 021, 020, 025, 024, 023, 022, 021, 020
+	.word	0
 
 ; dagger or bat hit (they are all missiles)
-Snd005:	.byte	30,30, 30,30, 20,20
-	.byte	0
+Snd005:	.word	30,30, 30,30, 20,20
+	.word	0
 
 ; guard hit by Nina
-Snd006:	.byte	21, 15, 27, 15, 46, 29, 16, 11, 22, 21, 38, 26, 36, 27, 30, 10
-	.byte	188, 235, 143, 109, 54, 52, 52, 196, 116, 120, 136, 163
-	.byte	0
-
-	.even
+Snd006:	.word	21, 15, 27, 15, 46, 29, 16, 11, 22, 21, 38, 26, 36, 27, 30, 10
+	.word	188, 235, 143, 109, 54, 52, 52, 196, 116, 120, 136, 163
+	.word	0
 
 .radix 8 
 

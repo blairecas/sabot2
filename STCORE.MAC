@@ -45,7 +45,7 @@ P_KEY_LEFT	=: 010
 P_KEY_FIRE	=: 060 ; 2 buttons 'fire' (40) and 'key A' (20)
 
 C_TAPES_NEEDED  =: 10.
-C_NORMAL_ENERGY =: 1
+C_NORMAL_ENERGY =: 0
 
 ; Special comments-warnings in the code:
 ; !!MUT-CMD!! - the command mutable, means other code changes it
@@ -481,7 +481,11 @@ DrawScreen:
 	bit	#200, @#PpuKeys
 	beq	10$
 	jmp	CoreStart
-10$:	; draw then
+10$:	; check FIRE key here
+	bit	#P_KEY_FIRE, @#PpuKeys
+	bne	20$
+	clr	UseTerminal+2
+20$:	; draw then
 	inc	FramesCount
 	clr	NinaOnFire
 	clr	NinaCanShock
