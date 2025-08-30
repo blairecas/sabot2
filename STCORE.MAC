@@ -436,15 +436,6 @@ EnergyUp:
 ; BuffD bytes: 2 (draw) -> 1 (still draw) -> 0 (do not draw)
 
 DrawScreen:
-	; check STOP key here
-	bit	#200, @#PpuKeys
-	beq	10$
-	jmp	CoreStart
-10$:	; check FIRE key here
-	bit	#P_KEY_FIRE, @#PpuKeys
-	bne	20$
-	clr	UseTerminal+2
-20$:	; draw then
 	inc	FramesCount
 	clr	NinaOnFire
 	clr	NinaCanShock
@@ -1050,6 +1041,7 @@ PanelTile016:
 ; //////////////////////////////////////////////////////////////////////////////
 
 RocketLaunch:
+	inc	RocketLaunched
 	return
 
 
@@ -2417,6 +2409,16 @@ K24762:	.BYTE	000, 000			; DEFGH
 
 ; NXMAN:
 MainCycle:
+	; check STOP key here
+	bit	#200, @#PpuKeys
+	beq	10$
+	jmp	CoreStart
+10$:	; check FIRE key here
+	bit	#P_KEY_FIRE, @#PpuKeys
+	bne	20$
+	clr	UseTerminal+2
+20$:	; end check keys
+
 	call	ClearBuffNina			; BUFCL Fill Ninja tile screen
 
 	; flamethrower tiles update (stop after use once)
