@@ -8,6 +8,7 @@ C_VADDR		=: 100000
 C_SCRWID	=: 80.
 C_VEMPTY1	=: 286.*C_SCRWID+C_VADDR
 SCRTOP 		=: C_VADDR+4
+C_ROCKET_VADDR	=: SCRTOP+12.
 
 TILES_DX	=: 32.
 TILES_DY	=: 18.
@@ -33,6 +34,8 @@ C_PPU_SOUND4	=: 12.
 C_PPU_SOUND5	=: 13.
 C_PPU_SOUND6	=: 14.
 C_PPU_SOUND7	=: 15.			; sound 'step'
+C_PPU_RSCROLL	=: 16.			; rocket scroll
+C_PPU_RTILE	=: 17.			; draw bottom rocket tile
 
 ; keys scancodes
 C_KEY_RIGHT	= 133

@@ -251,6 +251,8 @@ Main:	call	DrawTiles			;
 	jmp	Sound5				; 13.
 	jmp	Sound6				; 14.
 	jmp	Sound7				; 15.
+	jmp	RocketScroll			; 16.
+	jmp	RocketTile			; 17.
 	; ...
 
 Exit:	mtps	#200
@@ -958,6 +960,61 @@ Snd006:	.word	21, 15, 27, 15, 46, 29, 16, 11, 22, 21, 38, 26, 36, 27, 30, 10
 
 .radix 8 
 
+; //////////////////////////////////////////////////////////////////////////////
+; // Rocket launch related
+; //////////////////////////////////////////////////////////////////////////////
+
+RocketScroll:
+	mov	#177010, R4
+	mov	#177012, R5
+	mov	#177014, R2
+	mov	#C_ROCKET_VADDR, (R4)
+	mov	#8.*C_SCRWID, R3
+	mov	#144.-8., 40$+2
+10$:	mov	#11., 30$+2
+20$:	add	R3, (R4)
+	mov	(R5), R0
+	mov	(R2), R1
+	sub	R3, (R4)
+	mov	R0, (R5)
+	mov	R1, (R2)
+	inc	(R4)
+30$:	dec	#11.
+	bne	20$
+	add	#C_SCRWID-11., (R4)
+40$:	dec	#144.-8.
+	bne	10$	
+	jmp	Done
+
+; PpuData - [tile# X]
+; seems we only have two tiles zeroed and 377-ed
+RocketTile:
+	mov	#177010, R4
+	mov	#177012, R5
+	mov	#PpuData/2, (R4)
+	mov	@#177014, R1
+	mov	R1, R2
+	bic	#^B1111111100000000, R2		; R2 <- X
+	mov	#144.-8.*C_SCRWID+C_ROCKET_VADDR, (R4)
+	add	R2, (R4)
+	clrb	R1
+	swab	R1				; R1 <- tile#
+;	mul	#8., R1
+;	add	PC, R1
+;	add	#RocketTile000-., R1
+	cmp	#1, R1
+	beq	02$
+	clr	R1
+	br	04$
+02$:	mov	#377, R1
+04$:	mov	#4., R3
+	mov	#C_SCRWID, R2
+10$:	mov	R1, (R5)
+	add	R2, (R4)
+	mov	R1, (R5)
+	add	R2, (R4)
+	sob	R3, 10$
+	jmp	Done
 
 ; //////////////////////////////////////////////////////////////////////////////
 ; // Data
